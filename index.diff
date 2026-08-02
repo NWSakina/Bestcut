@@ -1,0 +1,11 @@
+--- static/index_stable_2026-07-31.html	2026-07-31 22:08:44.350131642 +0100
++++ static/index.html	2026-07-31 22:27:04.718131707 +0100
+@@ -16,7 +16,7 @@
+ }
+ 
+ body{
+-background:#111827;
++background:linear-gradient(180deg,#0b1220 0%,#131c2e 55%,#1a2335 100%);
+ color:#fff;
+ font-family:Arial,sans-serif;
+ height:100vh;

@@ -1,0 +1,64 @@
+--- static/index_github_reference.html	2026-07-31 23:09:32.814131859 +0100
++++ static/index.html	2026-07-31 22:27:04.718131707 +0100
+@@ -16,11 +16,11 @@
+ }
+ 
+ body{
+-background:#111827;
++background:linear-gradient(180deg,#0b1220 0%,#131c2e 55%,#1a2335 100%);
+ color:#fff;
+ font-family:Arial,sans-serif;
+ height:100vh;
+-overflow:hidden;
++overflow:auto;
+ }
+ 
+ .app{
+@@ -50,18 +50,18 @@
+ }
+ 
+ .viewer{
+-height:60vh;
++flex:1;
+ display:flex;
+ justify-content:center;
+ align-items:center;
+-padding:10px;
++padding:10px 10px 0 10px;
+ background:#0f172a;
+ overflow:hidden;
+ }
+ 
+ .preview{
+ position:relative;
+-width:min(95vw,420px);
++width:min(90vw,360px);
+ aspect-ratio:9/16;
+ background:#000;
+ border-radius:18px;
+@@ -102,17 +102,21 @@
+ }
+ 
+ .toolbar{
+-height:120px;
++height:100px;
++width:95%;
++max-width:420px;
++margin:0 auto;
+ background:#1f2937;
+ border-top:1px solid #334155;
+ display:flex;
+ align-items:center;
+-padding:12px;
+-gap:10px;
++padding:10px;
++gap:8px;
++border-radius:18px 18px 0 0;
+ }
+ 
+ #uploadBtn{
+-height:54px;
++height:48px;
+ padding:0 22px;
+ border:none;
+ border-radius:14px;

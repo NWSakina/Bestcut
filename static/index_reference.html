@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Bestcut</title>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+}
+
+body{
+background:linear-gradient(180deg,#0b1220 0%,#131c2e 55%,#1a2335 100%);
+color:#fff;
+font-family:Arial,sans-serif;
+height:100vh;
+overflow:auto;
+}
+
+.app{
+display:flex;
+flex-direction:column;
+height:100vh;
+}
+
+header{
+height:10vh;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+background:#111827;
+border-bottom:1px solid #273449;
+}
+
+header h1{
+font-size:34px;
+}
+
+header p{
+margin-top:4px;
+font-size:14px;
+color:#9ca3af;
+}
+
+.viewer{
+flex:1;
+display:flex;
+justify-content:center;
+align-items:center;
+padding:10px 10px 0 10px;
+background:#0f172a;
+overflow:hidden;
+}
+
+.preview{
+position:relative;
+width:min(90vw,360px);
+aspect-ratio:9/16;
+background:#000;
+border-radius:18px;
+overflow:hidden;
+box-shadow:0 0 25px rgba(0,0,0,.4);
+}
+
+.preview video{
+width:100%;
+height:100%;
+object-fit:contain;
+background:#000;
+}
+
+#subtitleOverlay{
+position:absolute;
+top:46%;
+left:50%;
+transform:translate(-50%,-50%);
+display:block;
+width:78%;
+max-width:78%;
+padding:10px 18px;
+background:rgba(255,255,255,.16);
+border:1px solid rgba(255,255,255,.22);
+border-radius:10px;
+backdrop-filter:blur(2px);
+-webkit-backdrop-filter:blur(2px);
+color:#fff;
+font-size:22px;
+font-weight:bold;
+text-align:center;
+line-height:1.4;
+white-space:pre-wrap;
+word-break:keep-all;
+text-shadow:0 2px 8px rgba(0,0,0,.8);
+pointer-events:none;
+}
+
+.toolbar{
+height:100px;
+width:95%;
+max-width:420px;
+margin:0 auto;
+background:#1f2937;
+border-top:1px solid #334155;
+display:flex;
+align-items:center;
+padding:10px;
+gap:8px;
+border-radius:18px 18px 0 0;
+}
+
+#uploadBtn{
+height:48px;
+padding:0 22px;
+border:none;
+border-radius:14px;
+background:#2563eb;
+color:#fff;
+font-size:18px;
+cursor:pointer;
+}
+
+.toolIcon{
+width:52px;
+height:52px;
+border:none;
+border-radius:14px;
+background:#374151;
+color:#fff;
+font-size:24px;
+cursor:pointer;
+}
+
+#status{
+flex:1;
+font-size:15px;
+color:#d1d5db;
+padding-right:8px;
+}
+
+#videoFile{
+display:none;
+}
+
+#result{
+display:none;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<header>
+<h1>Bestcut</h1>
+<p>ذكاء اصطناعي لمعالجة الفيديو والترجمة</p>
+</header>
+
+<div class="viewer">
+
+<div class="preview">
+
+<video
+id="videoPreview"
+controls>
+</video>
+
+<div id="subtitleOverlay">
+النص سيظهر هنا
+</div>
+
+</div>
+
+</div>
+
+<div class="toolbar">
+
+<input
+type="file"
+id="videoFile"
+accept="video/*">
+
+<button id="uploadBtn">
+بدء المعالجة
+</button>
+
+<button
+class="toolIcon"
+id="pickVideoBtn">
+🎬
+</button>
+
+<button
+class="toolIcon"
+id="pickImageBtn">
+🖼️
+</button>
+
+<button
+class="toolIcon"
+id="addTextBtn">
+✏️
+</button>
+
+<span id="status">
+بانتظار الفيديو...
+</span>
+
+</div>
+
+<textarea
+id="result"
+readonly
+placeholder="سيظهر النص هنا..."></textarea>
+
+<script>
+
+const result=document.getElementById("result");
+const video=document.getElementById("videoPreview");
+const overlay=document.getElementById("subtitleOverlay");
+const status=document.getElementById("status");
+const uploadBtn=document.getElementById("uploadBtn");
+const videoFile=document.getElementById("videoFile");
+const pickVideoBtn=document.getElementById("pickVideoBtn");
+
+pickVideoBtn.onclick=()=>{
+videoFile.click();
+};
+
+videoFile.onchange=()=>{
+if(videoFile.files.length){
+video.src=URL.createObjectURL(videoFile.files[0]);
+status.textContent="تم اختيار الفيديو";
+}
+};
+
+uploadBtn.onclick=async()=>{
+status.textContent="جاري المعالجة...";
+
+if(videoFile.files.length===0){
+status.textContent="اختر فيديو أولاً";
+return;
+}
+
+const formData=new FormData();
+formData.append("file",videoFile.files[0]);
+
+try{
+
+const response=await fetch("/transcribe",{
+method:"POST",
+body:formData
+});
+
+const data=await response.json();
+
+status.textContent="تمت المعالجة";
+
+if(data.text){
+result.value=data.text;
+}
+
+if(data.subtitles){
+
+video.ontimeupdate=()=>{
+
+const t=video.currentTime;
+
+const current=data.subtitles.find(s=>{
+
+const a=s.start.replace(",",".").split(":");
+const b=s.end.replace(",",".").split(":");
+
+const start=(+a[0])*3600+(+a[1])*60+parseFloat(a[2]);
+const end=(+b[0])*3600+(+b[1])*60+parseFloat(b[2]);
+
+return t>=start && t<=end;
+
+});
+
+overlay.textContent = current ? current.text.replace(/^\s*\[?\d+\]?\s*/, "") : "";
+
+};
+
+}
+
+}catch(e){
+
+status.textContent="فشلت المعالجة";
+
+}
+
+};
+
+</script>
+
+</div>
+
+</body>
+
+</html>
