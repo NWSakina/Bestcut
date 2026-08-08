@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bestcut</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:linear-gradient(180deg,#0b1220 0%,#131c2e 55%,#1a2335 100%);color:#fff;font-family:Arial,sans-serif;height:100vh;overflow:auto;}
+.app{display:flex;flex-direction:column;height:100vh;}
+header{height:10vh;display:flex;flex-direction:column;justify-content:center;align-items:center;background:#111827;border-bottom:1px solid #273449;}
+header h1{font-size:34px;}
+header p{margin-top:4px;font-size:14px;color:#9ca3af;}
+.viewer{flex:1;display:flex;justify-content:center;align-items:center;padding:10px 10px 0 10px;background:#0f172a;overflow:hidden;}
+.preview{position:relative;width:min(90vw,360px);aspect-ratio:9/16;background:#000;border-radius:18px;overflow:hidden;box-shadow:0 0 25px rgba(0,0,0,.4);}
+#textLayer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;}
+.preview video{width:100%;height:100%;object-fit:contain;background:#000;}
+#subtitleOverlay{position:absolute;top:22%;left:50%;transform:translate(-50%,-50%);display:block;width:78%;max-width:78%;padding:10px 18px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:10px;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);color:#fff;font-size:22px;font-weight:bold;text-align:center;line-height:1.4;white-space:pre-wrap;word-break:keep-all;text-shadow:0 2px 8px rgba(0,0,0,.8);pointer-events:none;}
+#textOverlay{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);min-width:220px;max-width:80%;padding:14px 20px;border-radius:16px;background:rgba(255,255,255,.18);backdrop-filter:blur(8px);border:2px dashed rgba(255,255,255,.45);color:#fff;font-size:24px;font-weight:bold;text-align:center;outline:none;display:none;z-index:20;pointer-events:none;}
+.selected{border:2px solid #00bfff !important;}
+.toolbar{height:100px;width:95%;max-width:420px;margin:0 auto;background:#1f2937;border-top:1px solid #334155;display:flex;align-items:center;gap:8px;padding:10px;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;white-space:nowrap;border-radius:18px 18px 0 0;}
+#uploadBtn{height:48px;padding:0 22px;border:none;border-radius:14px;background:#2563eb;color:#fff;font-size:18px;cursor:pointer;}
+.toolIcon{width:56px;height:56px;border:none;border-radius:16px;background:#374151;color:#ffffff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:0.2s;}
+.toolIcon:hover{background:#4b5563;transform:scale(1.05);}
+.toolIcon:active{transform:scale(0.96);}
+#status{flex:1;font-size:15px;color:#d1d5db;padding-right:8px;}
+#videoFile{display:none;}
+#result{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<h1>Bestcut</h1>
+<p>ذكاء اصطناعي لمعالجة الفيديو والترجمة</p>
+</header>
+<div class="viewer">
+<div class="preview">
+<video id="videoPreview" controls></video>
+<div id="textLayer"></div>
+<div id="textOverlay" contenteditable="true">اكتب النص...</div>
+<div id="subtitleOverlay">النص سيظهر هنا</div>
+</div>
+</div>
+<div class="toolbar">
+<input type="file" id="videoFile" accept="video/*">
+<button id="uploadBtn">بدء المعالجة</button>
+<button class="toolIcon" id="pickVideoBtn" title="اختيار فيديو">🎬</button>
+<button class="toolIcon" id="pickImageBtn" title="اختيار صورة">🖼️</button>
+<button class="toolIcon" id="addTextBtn" title="إضافة نص">✏️</button>
+<button class="toolIcon" id="subtitleBtn" title="أدوات الترجمة">💬</button>
+<button class="toolIcon" id="exportBtn" title="تحميل الفيديو النهائي">⬇️</button>
+</div>
+<textarea id="result" readonly placeholder="سيظهر النص هنا..."></textarea>
+<script>
+const result=document.getElementById("result");
+const video=document.getElementById("videoPreview");
+const overlay=document.getElementById("subtitleOverlay");
+const textOverlay=document.getElementById("textOverlay");
+textOverlay.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));textOverlay.classList.add("selected");};
+const addTextBtn=document.getElementById("addTextBtn");
+const exportBtn=document.getElementById("exportBtn");
+const subtitleBtn=document.getElementById("subtitleBtn");
+const uploadBtn=document.getElementById("uploadBtn");
+const videoFile=document.getElementById("videoFile");
+const pickVideoBtn=document.getElementById("pickVideoBtn");
+let currentSubtitleIndex = -1;
+let subtitles = [];
+let srtText = "";
+
+function buildSrt(subtitles){
+    return subtitles.map((s,i)=>`${i+1} ${s.start} --> ${s.end}\n${s.text}`).join("\n\n");
+}
+
+pickVideoBtn.onclick=()=>{videoFile.click();};
+
+addTextBtn.onclick=()=>{
+const copy=textOverlay.cloneNode(true);
+copy.removeAttribute("id");
+copy.contentEditable="true";
+copy.style.pointerEvents="auto";
+copy.style.display="block";
+copy.style.position="absolute";
+const offsetCount = textLayer.children.length;
+copy.style.top = (35 + (offsetCount * 40)) + "px";
+copy.style.right = "25px";
+textLayer.appendChild(copy);
+
+let isDragging = false;
+let startX = 0, startY = 0;
+let initialLeft = 0, initialTop = 0;
+
+copy.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) {
+        isDragging = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        const rect = copy.getBoundingClientRect();
+        const parentRect = textLayer.getBoundingClientRect();
+        initialLeft = rect.left - parentRect.left;
+        initialTop = rect.top - parentRect.top;
+        copy.style.right = 'auto';
+        copy.style.left = initialLeft + 'px';
+        copy.style.top = initialTop + 'px';
+    }
+}, { passive: false });
+
+window.addEventListener('touchmove', function(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    copy.style.left = (initialLeft + dx) + 'px';
+    copy.style.top = (initialTop + dy) + 'px';
+}, { passive: false });
+
+window.addEventListener('touchend', function() {isDragging = false;});
+copy.focus();
+copy.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));copy.classList.add("selected");};
+copy.tabIndex=0;
+};
+
+subtitleBtn.onclick=()=>{
+    if(!subtitles || subtitles.length===0){
+        alert("قم بمعالجة الفيديو أولاً لإنشاء الترجمة.");
+        return;
+    }
+    let index=currentSubtitleIndex;
+    if(index===-1){index=0; currentSubtitleIndex=0;}
+    const currentText=subtitles[index].text || "";
+    const text=prompt("عدل الترجمة:",currentText);
+    if(text===null)return;
+    subtitles[index].text=text;
+    srtText=buildSrt(subtitles);
+    overlay.textContent=text;
+};
+
+exportBtn.onclick=async()=>{
+if(videoFile.files.length===0){
+    alert("اختر فيديو أولاً");
+    return;
+}
+if(!srtText.trim()){
+    alert("لا توجد ترجمة لتصديرها");
+    return;
+}
+
+const formData=new FormData();
+formData.append("file",videoFile.files[0]);
+formData.append("srt", srtText);
+const leftVal = parseFloat(overlay.style.left) || 50;
+const topVal = parseFloat(overlay.style.top) || 80;
+const scaleVal = (typeof scale !== "undefined" && scale) ? scale : 1.0;
+formData.append("subtitle_left", leftVal);
+formData.append("subtitle_top", topVal);
+formData.append("subtitle_scale", scaleVal);
+
+exportBtn.disabled=true;
+exportBtn.textContent="جاري التصدير...";
+
+try{
+    const response=await fetch("/export",{method:"POST",body:formData});
+    if(!response.ok) throw new Error("فشل تصدير الفيديو");
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="Bestcut_Final.mp4";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    alert("تم تصدير الفيديو بنجاح");
+}catch(e){
+    console.error(e);
+    alert(e.message||"فشل تصدير الفيديو");
+}finally{
+    exportBtn.disabled=false;
+    exportBtn.textContent="تصدير الفيديو";
+}
+};
+
+videoFile.onchange=()=>{
+if(videoFile.files.length){
+    video.src=URL.createObjectURL(videoFile.files[0]);
+    uploadBtn.textContent="ابدء المعالجة";
+}
+};
+
+uploadBtn.onclick=async()=>{
+if(videoFile.files.length===0){
+    alert("اختر فيديو أولاً");
+    return;
+}
+uploadBtn.textContent="جاري المعالجة...";
+const formData=new FormData();
+formData.append("file",videoFile.files[0]);
+formData.append("srt", srtText);
+
+try{
+    const response=await fetch("/transcribe",{method:"POST",body:formData});
+    const data=await response.json();
+    subtitles = data.subtitles;
+    srtText = buildSrt(data.subtitles || []);
+    uploadBtn.textContent="تمت المعالجة";
+    if(data.text){result.value=data.text;}
+    if(data.subtitles){
+        video.ontimeupdate=()=>{
+            const t=video.currentTime;
+            const current=data.subtitles.find(s=>{
+                const a=s.start.replace(",",".").split(":");
+                const b=s.end.replace(",",".").split(":");
+                const start=(+a[0])*3600+(+a[1])*60+parseFloat(a[2]);
+                const end=(+b[0])*3600+(+b[1])*60+parseFloat(b[2]);
+                return t>=start && t<=end;
+            });
+            overlay.textContent = current ? current.text.replace(/^\s*\[?\d+\]?\s*/, "") : "";
+            currentSubtitleIndex = current ? data.subtitles.indexOf(current) : -1;
+        };
+    }
+}catch(e){
+    uploadBtn.textContent="فشلت المعالجة";
+}
+};
+
+let dragging=false;
+let startX=0,startY=0;
+let startLeft=50,startTop=46;
+overlay.style.touchAction="none";
+overlay.style.pointerEvents="auto";
+
+overlay.addEventListener("touchstart",e=>{
+    dragging=true;
+    const t=e.touches[0];
+    startX=t.clientX;
+    startY=t.clientY;
+    const r=overlay.getBoundingClientRect();
+    const p=video.parentElement.getBoundingClientRect();
+    startLeft=((r.left+r.width/2-p.left)/p.width)*100;
+    startTop=((r.top+r.height/2-p.top)/p.height)*100;
+    e.preventDefault();
+});
+
+overlay.addEventListener("touchmove",e=>{
+    if(!dragging)return;
+    const t=e.touches[0];
+    const p=video.parentElement.getBoundingClientRect();
+    overlay.style.transform="translate(-50%,-50%)";
+    overlay.style.left=(startLeft+(t.clientX-startX)/p.width*100)+"%";
+    overlay.style.top=(startTop+(t.clientY-startY)/p.height*100)+"%";
+    e.preventDefault();
+});
+
+overlay.addEventListener("touchend",()=>{dragging=false;});
+let scale=1;
+overlay.addEventListener("touchmove",e=>{
+    if(e.touches.length!==2)return;
+    e.preventDefault();
+    const dx=e.touches[0].clientX-e.touches[1].clientX;
+    const dy=e.touches[0].clientY-e.touches[1].clientY;
+    const distance=Math.hypot(dx,dy);
+    if(!overlay.lastDistance){overlay.lastDistance=distance;return;}
+    scale*=distance/overlay.lastDistance;
+    scale=Math.max(0.5,Math.min(scale,3));
+    overlay.style.transform=`translate(-50%,-50%) scale(${scale})`;
+    overlay.lastDistance=distance;
+},{passive:false});
+
+overlay.addEventListener("touchend",()=>{overlay.lastDistance=null;});
+</script>
+</div>
+</body>
+</html>

@@ -23,6 +23,27 @@ def home():
     return FileResponse("static/index.html")
 
 
+import re
+
+def time_to_ms(t_str):
+    t_str = t_str.strip()
+    parts = t_str.split(':')
+    h = int(parts[0])
+    m = int(parts[1])
+    s_ms = parts[2].split(',')
+    s = int(s_ms[0])
+    ms = int(s_ms[1]) if len(s_ms) > 1 else 0
+    return h * 3600000 + m * 60000 + s * 1000 + ms
+
+def ms_to_time(ms):
+    h = ms // 3600000
+    ms %= 3600000
+    m = ms // 60000
+    ms %= 60000
+    s = ms // 1000
+    ms %= 1000
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
 def parse_srt(path: Path):
     subtitles = []
 
@@ -43,13 +64,33 @@ def parse_srt(path: Path):
         start, end = lines[1].split("-->")
         subtitle = " ".join(lines[2:]).replace("[","").replace("]","").replace("|","").strip()
 
-        subtitles.append(
-            {
-                "start": start.strip(),
-                "end": end.strip(),
-                "text": subtitle,
-            }
-        )
+        if not subtitle:
+            continue
+
+        # فصل النص تلقائياً بناءً على الأرقام الفاصلة بين الآيات (مثل 3، 4، 5...)
+        parts = [p.strip() for p in re.split(r'\b\d+\b', subtitle) if p.strip()]
+
+        if not parts:
+            continue
+
+        start_ms = time_to_ms(start)
+        end_ms = time_to_ms(end)
+        total_duration = end_ms - start_ms
+        part_duration = total_duration / len(parts)
+
+        # إزاحة زمنية طفيفة (150 ملي ثانية) لتأخير النص قليلاً ليتطابق مع الصوت في المقاطع المقسمة
+        offset = 150 if len(parts) > 1 else 0
+
+        for idx, part_text in enumerate(parts):
+            c_start = start_ms + int(idx * part_duration) + offset
+            c_end = start_ms + int((idx + 1) * part_duration) + offset
+            if c_end > end_ms:
+                c_end = end_ms
+            subtitles.append({
+                "start": ms_to_time(c_start),
+                "end": ms_to_time(c_end),
+                "text": part_text,
+            })
 
     return subtitles
 
