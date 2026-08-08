@@ -149,7 +149,7 @@ const formData=new FormData();
 formData.append("file",videoFile.files[0]);
 formData.append("srt", srtText);
 const leftVal = parseFloat(overlay.style.left) || 50;
-const topVal = parseFloat(overlay.style.top) || 80;
+const topVal = parseFloat(overlay.style.top) || 22;
 const scaleVal = (typeof scale !== "undefined" && scale) ? scale : 1.0;
 formData.append("subtitle_left", leftVal);
 formData.append("subtitle_top", topVal);
