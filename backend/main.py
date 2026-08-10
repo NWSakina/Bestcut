@@ -222,7 +222,7 @@ async def export(
         font_size = int(55 * max(0.5, min(subtitle_scale, 3.0)))
 
         # تصميم النص بحدود خارجية سوداء وخلفية شفافة تماماً
-        style_line = f"Style: Default,Cairo,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,1,5,10,10,10,1"
+        style_line = f"Style: Default,sans-serif,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,6,5,10,10,10,1"
 
         ass_content = f"""[Script Info]
 ScriptType: v4.00+
