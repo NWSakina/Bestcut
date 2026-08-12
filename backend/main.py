@@ -2,6 +2,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import uuid
+import json
 
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import FileResponse, JSONResponse
@@ -186,8 +187,12 @@ EXPORTED.mkdir(exist_ok=True)
 
 
 
-
-
+def hex_to_ass_color(hex_str):
+    hex_str = hex_str.lstrip('#')
+    r = hex_str[0:2]
+    g = hex_str[2:4]
+    b = hex_str[4:6]
+    return f"&H00{b}{g}{r}".upper()
 
 @app.post("/export")
 async def export(
@@ -195,7 +200,10 @@ async def export(
     srt: str = Form(...),
     subtitle_left: float = Form(50.0),
     subtitle_top: float = Form(22.0),
-    subtitle_scale: float = Form(1.0)
+    subtitle_scale: float = Form(1.0),
+    subtitle_color: str = Form("#FFFFFF"),
+    shadow_color: str = Form("#000000"),
+    custom_texts: str = Form("[]"),
 ):
     try:
         video_id = str(uuid.uuid4())
@@ -212,17 +220,25 @@ async def export(
         with open(srt_path, "w", encoding="utf-8") as f:
             f.write(srt)
 
+        # الإعدادات الثابتة للأبعاد
         vid_width = 720
         vid_height = 1280
 
+        # حساب الإحداثيات وحجم الخط بناءً على المدخلات
         pos_x = int((subtitle_left / 100.0) * vid_width)
         pos_y = int((subtitle_top / 100.0) * vid_height)
-        
-        # حجم خط واضح ومثالي للفيديو الرأسي
-        font_size = int(55 * max(0.5, min(subtitle_scale, 3.0)))
+        font_size = int(55 * subtitle_scale)
 
-        # تصميم النص بحدود خارجية سوداء وخلفية شفافة تماماً
-        style_line = f"Style: Default,sans-serif,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,6,5,10,10,10,1"
+        def hex_to_ass_color(hex_str):
+            hex_str = hex_str.lstrip('#')
+            r = hex_str[0:2]
+            g = hex_str[2:4]
+            b = hex_str[4:6]
+            return f"&H00{b}{g}{r}".upper()
+
+        primary_color = hex_to_ass_color(subtitle_color)
+        shadow_ass_color = hex_to_ass_color(shadow_color)
+        style_line = f"Style: Default,sans-serif,{font_size},{primary_color},&H000000FF,&H00000000,{shadow_ass_color},0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1"
 
         ass_content = f"""[Script Info]
 ScriptType: v4.00+
@@ -239,11 +255,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
         with open(srt_path, "r", encoding="utf-8") as f:
-            srt_data = f.read().replace('\r\n', '\n').replace('\r', '')
+            srt_data = f.read().replace('\r\n', '\n')
 
         blocks = srt_data.strip().split('\n\n')
-        
-        # دالة دقيقة لتحويل توقيت SRT إلى توقيت ASS متوافق 100% لتجنب فقدان المزامنة
+
         def convert_time(t_str):
             t_str = t_str.strip()
             parts = t_str.split(',')
@@ -253,7 +268,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             return f"{hms}.{cc}"
 
         for block in blocks:
-            block_lines = [l.strip() for l in block.split('\n') if l.strip()]
+            block_lines = [l.strip() for l in block.split('\n')]
             if len(block_lines) >= 2:
                 if "-->" in block_lines[0]:
                     time_line = block_lines[0]
@@ -267,30 +282,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 times = time_line.split(" --> ")
                 if len(times) == 2:
                     start = convert_time(times[0])
-                    end = convert_time(times[1].split(" ")[0])
+                    end = convert_time(times[1])
                     text = " \\N ".join(text_lines)
-                    ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{{\\an5\\pos({pos_x},{pos_y})}}{text}\n"
+                    # تطبيق الإحداثيات المثالية هنا
+                    ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{{\\pos({pos_x},{pos_y})}}{text}\n"
 
         with open(ass_path, "w", encoding="utf-8") as f:
             f.write(ass_content)
 
         ass_file_str = ass_path.resolve().as_posix()
 
+        custom_filters = ""
+        try:
+            texts_data = json.loads(custom_texts) if custom_texts else []
+            for item in texts_data:
+                if item.get("text", "").strip():
+                    safe_text = item["text"].replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
+                    x_val = f"(main_w * {item['left']}/100)"
+                    y_val = f"(main_h * {item['top']}/100)"
+                    fs = int(40 * item['scale'])
+                    custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor=white:shadowx=2:shadowy=2"
+        except Exception:
+            pass
+
         cmd = [
             "ffmpeg", "-y",
-            "-i", video_path.resolve().as_posix(),
+            "-i", str(video_path.resolve().as_posix()),
             "-fps_mode", "cfr",
-            "-vf", f"subtitles=\'{ass_file_str}\'",
+            "-vf", f"subtitles=\'{ass_file_str}\'{custom_filters}",
             "-c:a", "aac",
             output_path.resolve().as_posix()
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
         if not output_path.exists():
             return JSONResponse(
                 status_code=500,
-                content={"message": "FFmpeg output not found", "details": result.stderr}
+                content={"message": "FFmpeg output file not generated"}
             )
 
         return FileResponse(
@@ -302,10 +331,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     except subprocess.CalledProcessError as e:
         return JSONResponse(
             status_code=500,
-            content={"message": "FFmpeg error", "details": e.stderr}
+            content={"message": "FFmpeg error"}
         )
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"message": "Internal error", "details": str(e)}
+            content={"message": "Internal error"}
         )

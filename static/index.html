@@ -181,6 +181,16 @@ justify-content:center;
 transition:0.2s;
 }
 
+#colorPicker {
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 16px;
+    background: #374151;
+    cursor: pointer;
+    padding: 5px;
+}
+
 .toolIcon:hover{
 background:#4b5563;
 transform:scale(1.05);
@@ -279,6 +289,8 @@ title="أدوات الترجمة">
 💬
 </button>
 
+<input type="color" class="toolIcon" id="colorPicker" title="لون النص" value="#ffffff">
+<input type="color" class="toolIcon" id="shadowColorPicker" title="لون الظل" value="#000000">
 <button
 class="toolIcon"
 id="exportBtn"
@@ -298,10 +310,15 @@ placeholder="سيظهر النص هنا..."></textarea>
 const result=document.getElementById("result");
 const video=document.getElementById("videoPreview");
 const overlay=document.getElementById("subtitleOverlay");
+overlay.style.textShadow = "2px 2px 4px #000000";
 const textOverlay=document.getElementById("textOverlay");
 textOverlay.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));textOverlay.classList.add("selected");};
 const addTextBtn=document.getElementById("addTextBtn");
 const exportBtn=document.getElementById("exportBtn");
+const colorPicker = document.getElementById("colorPicker");
+colorPicker.oninput = () => {
+    overlay.style.color = colorPicker.value;
+};
 const subtitleBtn=document.getElementById("subtitleBtn");
 const uploadBtn=document.getElementById("uploadBtn");
 const videoFile=document.getElementById("videoFile");
@@ -329,13 +346,16 @@ copy.textContent="";
 const offsetCount = textLayer.children.length;
 copy.style.position = "absolute";
 copy.style.top = (35 + (offsetCount * 40)) + "px";
-copy.style.right = "25px";
+copy.style.right = "30%";
 textLayer.appendChild(copy);
 
-// --- آلية الحركة باللمس المباشرة ---
+// --- آلية الحركة والتحجيم باللمس ---
 let isDragging = false;
 let startX = 0, startY = 0;
 let initialLeft = 0, initialTop = 0;
+
+copy.scale = 1;
+copy.lastDistance = null;
 
 copy.addEventListener('touchstart', function(e) {
     if (e.touches.length === 1) {
@@ -343,7 +363,6 @@ copy.addEventListener('touchstart', function(e) {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
 
-        // تحويل التموضع إلى Left/Top لضمان حرية الحركة بدون قيود الـ Right
         const rect = copy.getBoundingClientRect();
         const parentRect = textLayer.getBoundingClientRect();
         initialLeft = rect.left - parentRect.left;
@@ -352,22 +371,39 @@ copy.addEventListener('touchstart', function(e) {
         copy.style.right = 'auto';
         copy.style.left = initialLeft + 'px';
         copy.style.top = initialTop + 'px';
+    } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        copy.lastDistance = Math.hypot(dx, dy);
     }
 }, { passive: false });
 
 window.addEventListener('touchmove', function(e) {
-    if (!isDragging) return;
-    e.preventDefault(); // منع تمرير الصفحة أثناء سحب النص
+    if (e.touches.length === 1 && isDragging) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        copy.style.left = (initialLeft + dx) + 'px';
+        copy.style.top = (initialTop + dy) + 'px';
+    } else if (e.touches.length === 2 && e.target === copy) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const distance = Math.hypot(dx, dy);
 
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-
-    copy.style.left = (initialLeft + dx) + 'px';
-    copy.style.top = (initialTop + dy) + 'px';
+        if (copy.lastDistance) {
+            const scaleFactor = distance / copy.lastDistance;
+            copy.scale *= scaleFactor;
+            copy.scale = Math.max(0.5, Math.min(copy.scale, 3));
+            copy.style.transform = `scale(${copy.scale})`;
+        }
+        copy.lastDistance = distance;
+    }
 }, { passive: false });
 
-window.addEventListener('touchend', function() {
+window.addEventListener('touchend', function(e) {
     isDragging = false;
+    copy.lastDistance = null;
 });
 copy.focus();
 copy.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));copy.classList.add("selected");};
@@ -421,6 +457,24 @@ const scaleVal = (typeof scale !== "undefined" && scale) ? scale : 1.0;
 formData.append("subtitle_left", leftVal);
 formData.append("subtitle_top", topVal);
 formData.append("subtitle_scale", scaleVal);
+// جمع بيانات النصوص اليدوية
+const customTexts = [];
+Array.from(document.getElementById("textLayer").children).forEach(el => {
+    // حساب الموقع بالنسبة المئوية لضمان الدقة
+    const parent = document.getElementById("textLayer").getBoundingClientRect();
+    const leftPercent = (parseFloat(el.style.left) / parent.width) * 100;
+    const topPercent = (parseFloat(el.style.top) / parent.height) * 100;
+    
+    customTexts.push({
+        text: el.textContent,
+        left: leftPercent || 50,
+        top: topPercent || 50,
+        scale: el.scale || 1.0
+    });
+});
+formData.append("custom_texts", JSON.stringify(customTexts));
+formData.append("subtitle_color", colorPicker.value);
+formData.append("shadow_color", shadowColorPicker.value);
 
 status.textContent="جاري تصدير الفيديو...";
 exportBtn.disabled=true;
@@ -599,6 +653,11 @@ overlay.lastDistance=distance;
 overlay.addEventListener("touchend",()=>{
 overlay.lastDistance=null;
 });
+
+const shadowColorPicker = document.getElementById("shadowColorPicker");
+shadowColorPicker.oninput = () => {
+    overlay.style.textShadow = `2px 2px 4px ${shadowColorPicker.value}`;
+};
 
 </script>
 
