@@ -270,9 +270,10 @@ title="اختيار فيديو">
 
 <button
 class="toolIcon"
-id="pickImageBtn"
-title="اختيار صورة">
-🖼️
+id="fontStyleBtn"
+title="نمط الخط"
+style="font-size: 12px; line-height: 1.1;">
+نمط<br>الخط
 </button>
 
 <button
@@ -332,6 +333,20 @@ ${s.start} --> ${s.end}
 ${s.text}`).join("\n\n");
 }
 
+// متغير لتخزين الخط الحالي
+let currentFont = "default";
+
+// برمجة زر نمط الخط للتبديل عند الضغط
+document.getElementById('fontStyleBtn').addEventListener('click', function() {
+    if (currentFont === "default") {
+        currentFont = "Scheherazade";
+        alert("تم التبديل إلى: خط شهرزاد");
+    } else {
+        currentFont = "default";
+        alert("تم التبديل إلى: الخط الافتراضي");
+    }
+});
+
 pickVideoBtn.onclick=()=>{
 videoFile.click();
 };
@@ -341,12 +356,14 @@ const copy=textOverlay.cloneNode(true);
 copy.removeAttribute("id");
 copy.contentEditable="true";
 copy.style.pointerEvents="auto";
-copy.style.display="block"; copy.style.position="absolute"; copy.style.top="40px"; copy.style.right="25px";
+copy.style.display="block"; copy.style.position="absolute";
+copy.style.top="40px"; 
+copy.style.left="50%";
+copy.style.transform="translateX(-50%)"; // إضافة خاصية التوسيط
 copy.textContent="";
 const offsetCount = textLayer.children.length;
 copy.style.position = "absolute";
 copy.style.top = (35 + (offsetCount * 40)) + "px";
-copy.style.right = "30%";
 textLayer.appendChild(copy);
 
 // --- آلية الحركة والتحجيم باللمس ---
@@ -462,8 +479,9 @@ const customTexts = [];
 Array.from(document.getElementById("textLayer").children).forEach(el => {
     // حساب الموقع بالنسبة المئوية لضمان الدقة
     const parent = document.getElementById("textLayer").getBoundingClientRect();
-    const leftPercent = (parseFloat(el.style.left) / parent.width) * 100;
-    const topPercent = (parseFloat(el.style.top) / parent.height) * 100;
+    const elRect = el.getBoundingClientRect();
+    const leftPercent = ((elRect.left + (elRect.width / 2) - parent.left) / parent.width) * 100;
+    const topPercent = ((elRect.top + (elRect.height / 2) - parent.top) / parent.height) * 100;
     
     customTexts.push({
         text: el.textContent,
@@ -475,6 +493,7 @@ Array.from(document.getElementById("textLayer").children).forEach(el => {
 formData.append("custom_texts", JSON.stringify(customTexts));
 formData.append("subtitle_color", colorPicker.value);
 formData.append("shadow_color", shadowColorPicker.value);
+formData.append("font", currentFont);
 
 status.textContent="جاري تصدير الفيديو...";
 exportBtn.disabled=true;

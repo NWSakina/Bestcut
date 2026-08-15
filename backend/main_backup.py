@@ -205,6 +205,11 @@ async def export(
     shadow_color: str = Form("#000000"),
     custom_texts: str = Form("[]"),
 ):
+    # قيم افتراضية لضمان ظهور النص في أعلى وسط الشاشة إن لم يتم تحريكه
+    DEFAULT_MANUAL_TEXT = "نص افتراضي"
+    DEFAULT_LEFT = 50.0  
+    DEFAULT_TOP = 10.0   
+    DEFAULT_SCALE = 1.0
     try:
         video_id = str(uuid.uuid4())
         UPLOADS.mkdir(exist_ok=True, parents=True)
@@ -294,12 +299,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         custom_filters = ""
         try:
-            texts_data = json.loads(custom_texts) if custom_texts else []
+            parsed_texts = json.loads(custom_texts) if custom_texts else []
+            texts_data = parsed_texts if parsed_texts else [{"text": DEFAULT_MANUAL_TEXT, "left": DEFAULT_LEFT, "top": DEFAULT_TOP, "scale": DEFAULT_SCALE}]
             for item in texts_data:
                 if item.get("text", "").strip():
                     safe_text = item["text"].replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
-                    x_val = f"({item['left']}/100)*w-text_w/2"
-                    y_val = f"({item['top']}/100)*h-text_h/2"
+                    x_val = f"(main_w * {item['left']}/100)"
+                    y_val = f"(main_h * {item['top']}/100)"
                     fs = int(40 * item['scale'])
                     custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor=white:shadowx=2:shadowy=2"
         except Exception:

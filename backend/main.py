@@ -298,7 +298,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for item in texts_data:
                 if item.get("text", "").strip():
                     safe_text = item["text"].replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
-                    x_val = f"(main_w * {item['left']}/100)"
+                    x_val = f"(main_w * {item['left']}/100) - (text_w/2)"
                     y_val = f"(main_h * {item['top']}/100)"
                     fs = int(40 * item['scale'])
                     custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor=white:shadowx=2:shadowy=2"
