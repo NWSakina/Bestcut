@@ -116,8 +116,13 @@ position:absolute;
 left:50%;
 bottom:8%;
 transform:translateX(-50%);
-min-width:220px;
-max-width:80%;
+width: max-content !important;
+min-width: auto !important;
+max-width: none !important;
+height: auto !important;
+min-height: auto !important;
+max-height: none !important;
+white-space: nowrap !important;
 padding:14px 20px;
 border-radius:16px;
 background:rgba(255,255,255,.18);
@@ -130,9 +135,8 @@ text-align:center;
 outline:none;
 display:none;
 z-index:20;
-pointer-events:none;
+pointer-events:auto;
 }
-
 .selected{
 border:2px solid #00bfff !important;
 }
@@ -354,6 +358,9 @@ videoFile.click();
 addTextBtn.onclick=()=>{
 const copy=textOverlay.cloneNode(true);
 copy.removeAttribute("id");
+copy.style.whiteSpace = "nowrap";
+copy.style.width = "max-content";
+copy.style.maxWidth = "none";
 copy.contentEditable="true";
 copy.style.pointerEvents="auto";
 copy.style.display="block"; copy.style.position="absolute";
@@ -386,6 +393,7 @@ copy.addEventListener('touchstart', function(e) {
         initialTop = rect.top - parentRect.top;
 
         copy.style.right = 'auto';
+        copy.style.transform = 'none';
         copy.style.left = initialLeft + 'px';
         copy.style.top = initialTop + 'px';
     } else if (e.touches.length === 2) {
