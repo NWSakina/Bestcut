@@ -171,18 +171,21 @@ cursor:pointer;
 }
 
 .toolIcon{
-width:56px;
-height:56px;
-border:none;
-border-radius:16px;
-background:#374151;
-color:#ffffff;
-font-size:26px;
-cursor:pointer;
-display:flex;
-align-items:center;
-justify-content:center;
-transition:0.2s;
+    width:48px;
+    height:48px;
+    min-width:48px;
+    padding:0;
+    border:none;
+    border-radius:16px;
+    background:#b8860b;
+    color:#ffffff;
+    font-size:26px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    transition:0.2s;
 }
 
 #colorPicker {
@@ -193,6 +196,23 @@ transition:0.2s;
     background: #374151;
     cursor: pointer;
     padding: 5px;
+}
+
+.colorTool {
+    position:relative;
+    text-align:center;
+    line-height:1.1;
+    font-size:12px;
+    font-weight:bold;
+}
+
+.colorTool input[type="color"] {
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    opacity:0;
+    cursor:pointer;
 }
 
 .toolIcon:hover{
@@ -256,52 +276,48 @@ controls>
 
 <div class="toolbar">
 
-<input
-type="file"
-id="videoFile"
-accept="video/*">
+    <input type="file" id="videoFile" accept="video/*">
 
-<button id="uploadBtn">
-بدء المعالجة
-</button>
+    <div class="toolIcon colorTool" id="pickVideoBtn" title="اختيار فيديو">
+        اختيار<br>فيديو
+    </div>
 
-<button
-class="toolIcon"
-id="pickVideoBtn"
-title="اختيار فيديو">
-🎬
-</button>
+    <button id="uploadBtn">
+        بدء المعالجة
+    </button>
 
-<button
-class="toolIcon"
-id="fontStyleBtn"
-title="نمط الخط"
-style="font-size: 12px; line-height: 1.1;">
-نمط<br>الخط
-</button>
+    <div class="toolIcon colorTool" id="subtitleBtn" title="أدوات الترجمة">
+        إصلاح<br>الترجمة
+    </div>
 
-<button
-class="toolIcon"
-id="addTextBtn"
-title="إضافة نص">
-✏️
-</button>
+    <div class="toolIcon colorTool" id="colorPickerBtn" title="لون الخط">
+        لون<br>الخط
+        <input type="color" id="colorPicker" value="#ffffff">
+    </div>
 
-<button
-class="toolIcon"
-id="subtitleBtn"
-title="أدوات الترجمة">
-💬
-</button>
+    <div class="toolIcon colorTool" id="shadowColorPickerBtn" title="لون الظل">
+        لون<br>الظل
+        <input type="color" id="shadowColorPicker" value="#000000">
+    </div>
 
-<input type="color" class="toolIcon" id="colorPicker" title="لون النص" value="#ffffff">
-<input type="color" class="toolIcon" id="shadowColorPicker" title="لون الظل" value="#000000">
-<button
-class="toolIcon"
-id="exportBtn"
-title="تحميل الفيديو النهائي">
-⬇️
-</button>
+    <div class="toolIcon colorTool" id="addTextBtn" title="إضافة عناوين">
+        إضافة<br>عناوين
+    </div>
+
+    <button
+        class="toolIcon"
+        id="fontStyleBtn"
+        title="نمط الخط"
+        style="font-size: 12px; line-height: 1.1;">
+        نمط<br>الخط
+    </button>
+
+    <button
+        class="toolIcon"
+        id="exportBtn"
+        title="تحميل الفيديو النهائي">
+        ⬇️
+    </button>
 
 </div>
 

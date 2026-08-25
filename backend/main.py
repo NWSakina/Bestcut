@@ -3,6 +3,8 @@ import shutil
 import subprocess
 import uuid
 import json
+from PIL import Image
+from difflib import SequenceMatcher
 
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import FileResponse, JSONResponse
@@ -17,7 +19,8 @@ UPLOADS.mkdir(exist_ok=True)
 
 WHISPER_BIN = Path("/data/data/com.termux/files/home/whisper.cpp/build/bin/whisper-cli")
 MODEL = Path("/data/data/com.termux/files/home/whisper.cpp/models/ggml-small.bin")
-
+HARFBUZZ_VIEW = Path("/data/data/com.termux/files/usr/bin/hb-view")
+ARABIC_FONT = Path("/data/data/com.termux/files/home/Bestcut/backend/fonts/ScheherazadeNew-Regular.ttf")
 
 @app.get("/")
 def home():
@@ -44,6 +47,79 @@ def ms_to_time(ms):
     s = ms // 1000
     ms %= 1000
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+import urllib.request
+
+UTHMANI_AYAHS = None
+
+def normalize_quran_text(s):
+    s = re.sub(r'[\u064B-\u065F\u0670\u06D6-\u06ED]', '', s)
+    s = s.replace("ٱ", "ا")
+    s = re.sub(r'[أإآ]', 'ا', s)
+    s = s.replace("ؤو", "و")
+    s = s.replace("ى", "ي")
+    s = s.replace("ـ", "")
+    s = s.replace("ا", "")
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+def load_uthmani_ayahs():
+    global UTHMANI_AYAHS
+
+    if UTHMANI_AYAHS is not None:
+        return UTHMANI_AYAHS
+
+    try:
+        url = "https://api.alquran.cloud/v1/quran/quran-uthmani"
+        with urllib.request.urlopen(url, timeout=30) as r:
+            data = json.load(r)
+
+        UTHMANI_AYAHS = []
+
+        for surah in data["data"]["surahs"]:
+            for ayah in surah["ayahs"]:
+                text = ayah["text"].replace("\ufeff", "").strip()
+                UTHMANI_AYAHS.append(text)
+
+        return UTHMANI_AYAHS
+
+    except Exception as e:
+        print("UTHMANI LOAD ERROR:", e)
+        return []
+
+def find_uthmani_text(text):
+    normalized = normalize_quran_text(text)
+
+    if not normalized:
+        return text
+
+    ayahs = load_uthmani_ayahs()
+
+    for ayah in ayahs:
+        ayah_normalized = normalize_quran_text(ayah)
+
+        # تطابق الآية كاملة
+        if ayah_normalized == normalized:
+            return ayah
+
+        # البحث عن جزء متصل من الآية
+        if normalized in ayah_normalized:
+            words = ayah.split()
+            normalized_words = [normalize_quran_text(w) for w in words]
+
+            target_words = normalized.split()
+
+            filtered_words = []
+            filtered_normalized = []
+
+            for w, nw in zip(words, normalized_words):
+                if nw:
+                    filtered_words.append(w)
+                    filtered_normalized.append(nw)
+
+            for i in range(len(filtered_normalized) - len(target_words) + 1):
+                if filtered_normalized[i:i + len(target_words)] == target_words:
+                    return " ".join(filtered_words[i:i + len(target_words)])
+    return text
 
 def parse_srt(path: Path):
     subtitles = []
@@ -62,38 +138,151 @@ def parse_srt(path: Path):
         if "-->" not in lines[1]:
             continue
 
-        start, end = lines[1].split("-->")
-        subtitle = " ".join(lines[2:]).replace("[","").replace("]","").replace("|","").strip()
+        start, end = lines[1].split("-->", 1)
+
+        subtitle = " ".join(lines[2:]).strip()
 
         if not subtitle:
             continue
 
-        # فصل النص تلقائياً بناءً على الأرقام الفاصلة بين الآيات (مثل 3، 4، 5...)
-        parts = [p.strip() for p in re.split(r'\b\d+\b', subtitle) if p.strip()]
+        # إزالة رقم المقطع الذي يضعه Whisper مثل: [2] أو 2]
+        subtitle = re.sub(r"^\\s*\\[?\\d+\\]?\\s*", "", subtitle)
 
-        if not parts:
+        if not subtitle:
             continue
 
         start_ms = time_to_ms(start)
         end_ms = time_to_ms(end)
-        total_duration = end_ms - start_ms
-        part_duration = total_duration / len(parts)
 
-        # إزاحة زمنية طفيفة (150 ملي ثانية) لتأخير النص قليلاً ليتطابق مع الصوت في المقاطع المقسمة
-        offset = 150 if len(parts) > 1 else 0
-
-        for idx, part_text in enumerate(parts):
-            c_start = start_ms + int(idx * part_duration) + offset
-            c_end = start_ms + int((idx + 1) * part_duration) + offset
-            if c_end > end_ms:
-                c_end = end_ms
-            subtitles.append({
-                "start": ms_to_time(c_start),
-                "end": ms_to_time(c_end),
-                "text": part_text,
-            })
+        # الحفاظ على حدود مقطع Whisper الأصلية.
+        # لا نعيد تقسيمه إلى كلمات عند فشل المطابقة.
+        subtitles.append({
+            "start": ms_to_time(start_ms),
+            "end": ms_to_time(end_ms),
+            "text": subtitle,
+        })
 
     return subtitles
+
+def wrap_arabic_text(text: str, font_size: int, max_width: int = 620) -> str:
+    words = text.split()
+    if not words:
+        return text
+
+    lines = []
+    current = ""
+
+    for word in words:
+        test_line = word if not current else current + " " + word
+
+        test_path = UPLOADS / f"_wrap_test_{uuid.uuid4().hex}.png"
+
+        try:
+            subprocess.run(
+                [
+                    str(HARFBUZZ_VIEW),
+                    str(ARABIC_FONT),
+                    test_line,
+                    "--background=none",
+                    "--foreground=ffffff",
+                    f"--font-size={font_size}",
+                    "-o",
+                    str(test_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            width = Image.open(test_path).size[0]
+
+        finally:
+            if test_path.exists():
+                test_path.unlink()
+
+        if width <= max_width or not current:
+            current = test_line
+        else:
+            lines.append(current)
+            current = word
+
+    if current:
+        lines.append(current)
+
+    return "\n".join(lines)
+
+def render_arabic_text(text: str, output_path: Path, font_size: int = 50):
+    lines = text.split("\n")
+
+    if len(lines) == 1:
+        subprocess.run(
+            [
+                str(HARFBUZZ_VIEW),
+                str(ARABIC_FONT),
+                text,
+                "--background=none",
+                "--foreground=ffffff",
+                f"--font-size={font_size}",
+                "-o",
+                str(output_path),
+            ],
+            check=True,
+        )
+        return
+
+    line_images = []
+
+    try:
+        for line in lines:
+            if not line.strip():
+                continue
+
+            temp_path = UPLOADS / f"_line_{uuid.uuid4().hex}.png"
+
+            subprocess.run(
+                [
+                    str(HARFBUZZ_VIEW),
+                    str(ARABIC_FONT),
+                    line,
+                    "--background=none",
+                    "--foreground=ffffff",
+                    f"--font-size={font_size}",
+                    "-o",
+                    str(temp_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            img = Image.open(temp_path).convert("RGBA")
+            line_images.append((img.copy(), temp_path))
+
+        if not line_images:
+            return
+
+        max_width = max(img.width for img, _ in line_images)
+        total_height = sum(img.height for img, _ in line_images)
+
+        canvas = Image.new(
+            "RGBA",
+            (max_width, total_height),
+            (0, 0, 0, 0),
+        )
+
+        y = 0
+
+        for img, _ in line_images:
+            x = (max_width - img.width) // 2
+            canvas.alpha_composite(img, (x, y))
+            y += img.height
+
+        canvas.save(output_path)
+
+    finally:
+        for _, temp_path in line_images:
+            if temp_path.exists():
+                temp_path.unlink()
 
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
@@ -135,6 +324,7 @@ async def transcribe(file: UploadFile = File(...)):
                 "--language",
                 "ar",
                 "--output-srt",
+                "--output-json-full",
                 "--output-file",
                 str(srt_base),
             ],
@@ -145,14 +335,21 @@ async def transcribe(file: UploadFile = File(...)):
 
         subtitles = parse_srt(srt_path)
 
-        full_text = "\n".join(item["text"] for item in subtitles)
+        display_subtitles = []
+
+        for item in subtitles:
+            display_item = item.copy()
+            display_item["text"] = re.sub(r"^\s*\d+\]\s*", "", display_item["text"])
+            display_subtitles.append(display_item)
+
+        full_text = "\n".join(item["text"] for item in display_subtitles)
 
         return JSONResponse(
             {
                 "success": True,
                 "message": "تمت المعالجة",
                 "text": full_text,
-                "subtitles": subtitles,
+                "subtitles": display_subtitles,
                 "video": "/" + str(video_path),
                 "srt": "/" + str(srt_path),
             }
@@ -198,6 +395,7 @@ def hex_to_ass_color(hex_str):
 async def export(
     file: UploadFile = File(...),
     srt: str = Form(...),
+    font: str = Form("default"),
     subtitle_left: float = Form(50.0),
     subtitle_top: float = Form(22.0),
     subtitle_scale: float = Form(1.0),
@@ -205,10 +403,15 @@ async def export(
     shadow_color: str = Form("#000000"),
     custom_texts: str = Form("[]"),
 ):
+    print("EXPORT FUNCTION STARTED")
+    print("EXPORT FONT:", font)
     try:
         video_id = str(uuid.uuid4())
         UPLOADS.mkdir(exist_ok=True, parents=True)
         EXPORTED.mkdir(exist_ok=True, parents=True)
+
+        harfbuzz_dir = UPLOADS / f"{video_id}_harfbuzz"
+        harfbuzz_dir.mkdir(exist_ok=True, parents=True)
 
         video_path = UPLOADS / f"{video_id}.mp4"
         srt_path = UPLOADS / f"{video_id}.srt"
@@ -227,7 +430,7 @@ async def export(
         # حساب الإحداثيات وحجم الخط بناءً على المدخلات
         pos_x = int((subtitle_left / 100.0) * vid_width)
         pos_y = int((subtitle_top / 100.0) * vid_height)
-        font_size = int(55 * subtitle_scale)
+        font_size = int(50 * subtitle_scale)
 
         def hex_to_ass_color(hex_str):
             hex_str = hex_str.lstrip('#')
@@ -238,7 +441,7 @@ async def export(
 
         primary_color = hex_to_ass_color(subtitle_color)
         shadow_ass_color = hex_to_ass_color(shadow_color)
-        style_line = f"Style: Default,sans-serif,{font_size},{primary_color},&H000000FF,&H00000000,{shadow_ass_color},0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1"
+        style_line = f"Style: Default,{'Scheherazade New' if font == 'Scheherazade' else 'sans-serif'},{font_size},{primary_color},&H000000FF,&H00000000,{shadow_ass_color},0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1"
 
         ass_content = f"""[Script Info]
 ScriptType: v4.00+
@@ -267,6 +470,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             cc = ms[:2].ljust(2, '0')
             return f"{hms}.{cc}"
 
+        harfbuzz_images = []
+
         for block in blocks:
             block_lines = [l.strip() for l in block.split('\n')]
             if len(block_lines) >= 2:
@@ -284,6 +489,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     start = convert_time(times[0])
                     end = convert_time(times[1])
                     text = " \\N ".join(text_lines)
+                    if font == "Scheherazade":
+                        hb_text = find_uthmani_text(" ".join(text_lines))
+                        hb_text = wrap_arabic_text(hb_text, font_size, 620)
+                        image_path = harfbuzz_dir / f"subtitle_{len(harfbuzz_images)}.png"
+                        render_arabic_text(hb_text, image_path, font_size)
+                        start_parts = start.split(":")
+                        end_parts = end.split(":")
+                        hb_start = int(start_parts[0]) * 3600 + int(start_parts[1]) * 60 + float(start_parts[2])
+                        hb_end = int(end_parts[0]) * 3600 + int(end_parts[1]) * 60 + float(end_parts[2])
+                        harfbuzz_images.append({
+                            "path": image_path,
+                            "start": hb_start,
+                            "end": hb_end,
+                        })
                     # تطبيق الإحداثيات المثالية هنا
                     ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{{\\pos({pos_x},{pos_y})}}{text}\n"
 
@@ -304,17 +523,60 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor=white:shadowx=2:shadowy=2"
         except Exception:
             pass
+        if font == "Scheherazade" and harfbuzz_images:
+            hb_inputs = []
+            hb_filters = []
+            current_video = "[0:v]"
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", str(video_path.resolve().as_posix()),
-            "-fps_mode", "cfr",
-            "-vf", f"subtitles=\'{ass_file_str}\'{custom_filters}",
-            "-c:a", "aac",
-            output_path.resolve().as_posix()
-        ]
+            for idx, item in enumerate(harfbuzz_images):
+                hb_inputs.extend(["-loop", "1", "-i", str(item["path"].resolve().as_posix())])
+
+                x_expr = f"(main_w * {subtitle_left}/100) - (overlay_w/2)"
+                y_expr = f"(main_h * {subtitle_top}/100) - overlay_h"
+
+                output_label = f"[hb{idx}]"
+                hb_filters.append(
+                    f"{current_video}[{idx + 1}:v]overlay="
+                    f"x={x_expr}:y={y_expr}:"
+                    f"enable='between(t,{item['start']},{item['end']})'"
+                    f":format=auto{output_label}"
+                )
+                current_video = output_label
+
+        if font == "Scheherazade" and harfbuzz_images:
+            filter_complex = ";".join(hb_filters)
+
+            if custom_filters:
+                filter_complex += f";{current_video}{custom_filters.lstrip(',')}[vout]"
+            else:
+                filter_complex += f";{current_video}null[vout]"
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(video_path.resolve().as_posix()),
+                *hb_inputs,
+                "-filter_complex", filter_complex,
+                "-map", "[vout]",
+                "-map", "0:a?",
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-pix_fmt", "yuv420p",
+                "-shortest",
+                output_path.resolve().as_posix()
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(video_path.resolve().as_posix()),
+                "-fps_mode", "cfr",
+                "-vf", f"subtitles=\'{ass_file_str}\':fontsdir=\'{Path('backend/fonts').resolve().as_posix()}\'{custom_filters}",
+                "-c:a", "aac",
+                output_path.resolve().as_posix()
+            ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
+        print("FFMPEG STDERR:", result.stderr)
+        print("FFMPEG RETURN CODE:", result.returncode)
 
         if not output_path.exists():
             return JSONResponse(
