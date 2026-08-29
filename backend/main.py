@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import uuid
 import json
-from PIL import Image
+from PIL import Image, ImageFilter, ImageDraw
 from difflib import SequenceMatcher
 
 from fastapi import FastAPI, File, UploadFile, Form
@@ -21,6 +21,7 @@ WHISPER_BIN = Path("/data/data/com.termux/files/home/whisper.cpp/build/bin/whisp
 MODEL = Path("/data/data/com.termux/files/home/whisper.cpp/models/ggml-small.bin")
 HARFBUZZ_VIEW = Path("/data/data/com.termux/files/usr/bin/hb-view")
 ARABIC_FONT = Path("/data/data/com.termux/files/home/Bestcut/backend/fonts/ScheherazadeNew-Regular.ttf")
+ARABIC_FONT_BOLD = Path("/data/data/com.termux/files/home/Bestcut/backend/fonts/ScheherazadeNew-Bold.ttf")
 
 @app.get("/")
 def home():
@@ -121,6 +122,123 @@ def find_uthmani_text(text):
                     return " ".join(filtered_words[i:i + len(target_words)])
     return text
 
+def find_best_pause_split(json_path: Path, word_count: int):
+    if not json_path.exists():
+        return None
+
+    try:
+        data = json.loads(
+            json_path.read_text(encoding="utf-8")
+        )
+
+        transcription = data.get("transcription", [])
+        if not transcription:
+            return None
+
+        tokens = transcription[0].get("tokens", [])
+        word_timings = []
+
+        current_text = ""
+        current_start = None
+        current_end = None
+
+        for token in tokens:
+            token_text = token.get("text", "")
+            if not token_text:
+                continue
+
+            clean_token = token_text.strip()
+            if not clean_token:
+                continue
+
+            if re.fullmatch(r"[\[\]\d]+", clean_token):
+                continue
+
+            token_start = token.get("offsets", {}).get("from")
+            token_end = token.get("offsets", {}).get("to")
+
+            if token_start is None or token_end is None:
+                continue
+
+            starts_new_word = token_text[0].isspace()
+
+            if starts_new_word and current_text:
+                word_timings.append({
+                    "text": current_text.strip(),
+                    "start": current_start,
+                    "end": current_end,
+                })
+
+                current_text = clean_token
+                current_start = token_start
+                current_end = token_end
+
+            else:
+                if not current_text:
+                    current_text = clean_token
+                    current_start = token_start
+                else:
+                    current_text += clean_token
+
+                current_end = token_end
+
+        if current_text:
+            word_timings.append({
+                "text": current_text.strip(),
+                "start": current_start,
+                "end": current_end,
+            })
+
+        if len(word_timings) < word_count:
+            return None
+
+        word_timings = word_timings[:word_count]
+
+        # ---------------------------------------------------------
+        # البحث عن الوقفات القصيرة الطبيعية بين الكلمات.
+        # لا نعتمد على كلمة معينة مثل "إن".
+        # ---------------------------------------------------------
+
+        candidates = []
+
+        min_words = 4
+        max_gap = 350
+
+        for i in range(min_words, word_count - min_words + 1):
+            previous_word = word_timings[i - 1]
+            next_word = word_timings[i]
+
+            gap = next_word["start"] - previous_word["end"]
+
+            if 10 <= gap <= max_gap:
+                balance_distance = abs(i - (word_count / 2))
+
+                # الوقفة الأطول أفضل،
+                # لكن نُبقي التوازن بين الجزأين عاملًا مهمًا.
+                score = (balance_distance * 100) - gap
+
+                candidates.append({
+                    "index": i,
+                    "gap": gap,
+                    "score": score,
+                    "time": next_word["start"],
+                })
+
+        if not candidates:
+            return None
+
+        best = min(
+            candidates,
+            key=lambda x: x["score"]
+        )
+
+        return best["index"], best["time"]
+
+    except Exception as e:
+        print("PAUSE SPLIT ERROR:", e)
+        return None
+
+
 def parse_srt(path: Path):
     subtitles = []
 
@@ -128,6 +246,9 @@ def parse_srt(path: Path):
         return subtitles
 
     text = path.read_text(encoding="utf-8")
+
+    # ملف JSON الذي أنشأه Whisper بجانب ملف SRT
+    json_path = path.with_suffix(".json")
 
     for block in text.strip().split("\n\n"):
         lines = block.splitlines()
@@ -146,7 +267,7 @@ def parse_srt(path: Path):
             continue
 
         # إزالة رقم المقطع الذي يضعه Whisper مثل: [2] أو 2]
-        subtitle = re.sub(r"^\\s*\\[?\\d+\\]?\\s*", "", subtitle)
+        subtitle = re.sub(r"^\s*\[?\d+\]?\s*", "", subtitle)
 
         if not subtitle:
             continue
@@ -154,13 +275,77 @@ def parse_srt(path: Path):
         start_ms = time_to_ms(start)
         end_ms = time_to_ms(end)
 
-        # الحفاظ على حدود مقطع Whisper الأصلية.
-        # لا نعيد تقسيمه إلى كلمات عند فشل المطابقة.
-        subtitles.append({
-            "start": ms_to_time(start_ms),
-            "end": ms_to_time(end_ms),
-            "text": subtitle,
-        })
+        words = subtitle.split()
+
+        # المقاطع القصيرة: نحافظ عليها كما هي.
+        if len(words) <= 7:
+            subtitles.append({
+                "start": ms_to_time(start_ms),
+                "end": ms_to_time(end_ms),
+                "text": subtitle,
+            })
+            continue
+
+        # المقاطع الطويلة:
+        # نبحث أولًا عن وقفة صوتية طبيعية مناسبة للقطع.
+        pause_split = find_best_pause_split(
+            json_path,
+            len(words)
+        )
+
+        if pause_split:
+            split_at, middle_ms = pause_split
+
+            # حماية من أي نتيجة غير منطقية.
+            if split_at < 1 or split_at >= len(words):
+                pause_split = None
+
+        if pause_split:
+            first_text = " ".join(words[:split_at])
+            second_text = " ".join(words[split_at:])
+
+            # الحفاظ على حدود المقطع الأصلي.
+            middle_ms = max(start_ms, min(middle_ms, end_ms))
+
+            subtitles.append({
+                "start": ms_to_time(start_ms),
+                "end": ms_to_time(middle_ms),
+                "text": first_text,
+            })
+
+            subtitles.append({
+                "start": ms_to_time(middle_ms),
+                "end": ms_to_time(end_ms),
+                "text": second_text,
+            })
+
+        else:
+            # إذا لم توجد وقفة مناسبة:
+            # نعود إلى التقسيم المتوازن السابق كحل احتياطي.
+            split_at = len(words) // 2
+
+            first_text = " ".join(words[:split_at])
+            second_text = " ".join(words[split_at:])
+
+            total_duration = end_ms - start_ms
+
+            first_duration = int(
+                total_duration * len(words[:split_at]) / len(words)
+            )
+
+            middle_ms = start_ms + first_duration
+
+            subtitles.append({
+                "start": ms_to_time(start_ms),
+                "end": ms_to_time(middle_ms),
+                "text": first_text,
+            })
+
+            subtitles.append({
+                "start": ms_to_time(middle_ms),
+                "end": ms_to_time(end_ms),
+                "text": second_text,
+            })
 
     return subtitles
 
@@ -181,7 +366,7 @@ def wrap_arabic_text(text: str, font_size: int, max_width: int = 620) -> str:
             subprocess.run(
                 [
                     str(HARFBUZZ_VIEW),
-                    str(ARABIC_FONT),
+                    str(ARABIC_FONT_BOLD),
                     test_line,
                     "--background=none",
                     "--foreground=ffffff",
@@ -211,15 +396,29 @@ def wrap_arabic_text(text: str, font_size: int, max_width: int = 620) -> str:
 
     return "\n".join(lines)
 
-def render_arabic_text(text: str, output_path: Path, font_size: int = 50):
-    lines = text.split("\n")
+def render_arabic_text(
+    text: str,
+    output_path: Path,
+    font_size: int = 50,
+    background_color: str = "#d4af37",
+    background_opacity: int = 43,
+):
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
 
+    if not lines:
+        return
+    bg_hex = background_color.lstrip("#")
+    bg_rgb = tuple(int(bg_hex[i:i+2], 16) for i in (0, 2, 4))
+    bg_alpha = int((background_opacity / 100) * 255)
+    bg_fill = (*bg_rgb, bg_alpha)
+
+    # السطر الواحد: نفس إطار HarfBuzz مع خلفية ذهبية شبه شفافة
     if len(lines) == 1:
         subprocess.run(
             [
                 str(HARFBUZZ_VIEW),
-                str(ARABIC_FONT),
-                text,
+                str(ARABIC_FONT_BOLD),
+                lines[0],
                 "--background=none",
                 "--foreground=ffffff",
                 f"--font-size={font_size}",
@@ -228,21 +427,54 @@ def render_arabic_text(text: str, output_path: Path, font_size: int = 50):
             ],
             check=True,
         )
+
+        img = Image.open(output_path).convert("RGBA")
+
+        # إضافة حد أسود خفيف حول الحروف
+        alpha = img.getchannel("A")
+
+        outline = Image.new(
+            "RGBA",
+            img.size,
+            (0, 0, 0, 0),
+        )
+
+        outline_alpha = alpha.filter(
+            ImageFilter.MaxFilter(5)
+        )
+
+        outline.putalpha(outline_alpha)
+
+        background = Image.new(
+            "RGBA",
+            img.size,
+            (0, 0, 0, 0),
+        )
+
+        background_draw = ImageDraw.Draw(background)
+        background_draw.rounded_rectangle(
+            [0, 0, img.size[0] - 1, img.size[1] - 1],
+            radius=16,
+            fill=bg_fill,
+        )
+
+        background.alpha_composite(outline)
+        background.alpha_composite(img)
+        background.save(output_path)
+
         return
 
     line_images = []
 
     try:
+        # إنشاء صورة مستقلة لكل سطر بواسطة HarfBuzz
         for line in lines:
-            if not line.strip():
-                continue
-
             temp_path = UPLOADS / f"_line_{uuid.uuid4().hex}.png"
 
             subprocess.run(
                 [
                     str(HARFBUZZ_VIEW),
-                    str(ARABIC_FONT),
+                    str(ARABIC_FONT_BOLD),
                     line,
                     "--background=none",
                     "--foreground=ffffff",
@@ -256,26 +488,74 @@ def render_arabic_text(text: str, output_path: Path, font_size: int = 50):
             )
 
             img = Image.open(temp_path).convert("RGBA")
-            line_images.append((img.copy(), temp_path))
+
+            bbox = img.getbbox()
+            if bbox:
+                img = img.crop(bbox)
+
+            # إضافة حد أسود خفيف حول الحروف
+            alpha = img.getchannel("A")
+
+            outline = Image.new(
+                "RGBA",
+                img.size,
+                (0, 0, 0, 0),
+            )
+
+            outline_alpha = alpha.filter(
+                ImageFilter.MaxFilter(5)
+            )
+
+            outline.putalpha(outline_alpha)
+
+            outlined_img = Image.new(
+                "RGBA",
+                img.size,
+                (0, 0, 0, 0),
+            )
+
+            outlined_img.alpha_composite(outline)
+            outlined_img.alpha_composite(img)
+
+            line_images.append((outlined_img.copy(), temp_path))
 
         if not line_images:
             return
 
-        max_width = max(img.width for img, _ in line_images)
-        total_height = sum(img.height for img, _ in line_images)
+        # نفس الإطار الأفقي لجميع السطور
+        horizontal_padding = 12
+        frame_width = max(img.width for img, _ in line_images) + (horizontal_padding * 2)
 
+        # تقليل المسافة العمودية بين السطرين
+        line_gap = max(0, int(font_size * 0.04))
+
+        # ارتفاع الإطار الواحد
+        frame_height = sum(img.height for img, _ in line_images)
+        frame_height += line_gap * (len(line_images) - 1)
+
+        # إطار واحد بخلفية شفافة وحواف مستديرة
         canvas = Image.new(
             "RGBA",
-            (max_width, total_height),
+            (frame_width, frame_height),
             (0, 0, 0, 0),
+        )
+
+        canvas_draw = ImageDraw.Draw(canvas)
+        canvas_draw.rounded_rectangle(
+            [0, 0, frame_width - 1, frame_height - 1],
+            radius=16,
+            fill=bg_fill,
         )
 
         y = 0
 
         for img, _ in line_images:
-            x = (max_width - img.width) // 2
+            # توسيط كل سطر بشكل مستقل داخل نفس الإطار
+            x = (frame_width - img.width) // 2
+
             canvas.alpha_composite(img, (x, y))
-            y += img.height
+
+            y += img.height + line_gap
 
         canvas.save(output_path)
 
@@ -400,6 +680,8 @@ async def export(
     subtitle_top: float = Form(22.0),
     subtitle_scale: float = Form(1.0),
     subtitle_color: str = Form("#FFFFFF"),
+    background_color: str = Form("#d4af37"),
+    background_opacity: int = Form(43),
     shadow_color: str = Form("#000000"),
     custom_texts: str = Form("[]"),
 ):
@@ -430,7 +712,7 @@ async def export(
         # حساب الإحداثيات وحجم الخط بناءً على المدخلات
         pos_x = int((subtitle_left / 100.0) * vid_width)
         pos_y = int((subtitle_top / 100.0) * vid_height)
-        font_size = int(50 * subtitle_scale)
+        font_size = int(55 * subtitle_scale)
 
         def hex_to_ass_color(hex_str):
             hex_str = hex_str.lstrip('#')
@@ -493,7 +775,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         hb_text = find_uthmani_text(" ".join(text_lines))
                         hb_text = wrap_arabic_text(hb_text, font_size, 620)
                         image_path = harfbuzz_dir / f"subtitle_{len(harfbuzz_images)}.png"
-                        render_arabic_text(hb_text, image_path, font_size)
+                        render_arabic_text(hb_text, image_path, font_size, background_color, background_opacity)
                         start_parts = start.split(":")
                         end_parts = end.split(":")
                         hb_start = int(start_parts[0]) * 3600 + int(start_parts[1]) * 60 + float(start_parts[2])
@@ -539,7 +821,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"{current_video}[{idx + 1}:v]overlay="
                     f"x={x_expr}:y={y_expr}:"
                     f"enable='between(t,{item['start']},{item['end']})'"
-                    f":format=auto{output_label}"
+                    f":format=auto:alpha=straight{output_label}"
                 )
                 current_video = output_label
 

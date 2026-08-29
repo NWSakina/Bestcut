@@ -206,6 +206,53 @@ cursor:pointer;
     font-weight:bold;
 }
 
+#backgroundOpacityPanel {
+    display:none;
+    position:absolute;
+    left:50%;
+    bottom:88px;
+    transform:translateX(-50%);
+    align-items:center;
+    gap:8px;
+    z-index:1000;
+    padding:6px 8px;
+    background:rgba(17,24,39,.92);
+    border-radius:16px;
+    pointer-events:none;
+}
+
+#backgroundOpacityPanel input,
+#backgroundOpacityPanel span,
+#backgroundOpacityPanel button {
+    pointer-events:auto;
+}
+
+#backgroundOpacityPicker {
+    width:220px;
+    height:4px;
+    accent-color:#d4af37;
+    cursor:pointer;
+}
+
+#backgroundOpacityValue {
+    min-width:36px;
+    color:#ffffff;
+    font-size:12px;
+    font-weight:bold;
+    text-align:center;
+}
+
+#backgroundOpacityOk {
+    border:none;
+    padding:3px 7px;
+    border-radius:8px;
+    background:#2563eb;
+    color:#ffffff;
+    font-size:11px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
 .colorTool input[type="color"] {
     position:absolute;
     inset:0;
@@ -235,8 +282,170 @@ padding-right:8px;
 display:none;
 }
 
+/* ===== قائمة إصلاح الترجمة ===== */
+#subtitleEditorPanel{
+display:none;
+width:100%;
+box-sizing:border-box;
+max-height:45vh;
+overflow-y:auto;
+padding:8px;
+background:#111827;
+border-radius:8px;
+margin-bottom:8px;
+}
+
+.subtitleEditorItem{
+width:100%;
+box-sizing:border-box;
+min-height:42px;
+padding:8px 10px;
+margin-bottom:6px;
+background:#1f2937;
+border:1px solid #4b5563;
+border-radius:7px;
+color:#ffffff;
+font-size:14px;
+line-height:1.5;
+direction:rtl;
+text-align:right;
+outline:none;
+}
+
+.subtitleEditorItem:focus{
+border-color:#9ca3af;
+background:#374151;
+}
+
 #result{
 display:none;
+}
+
+/* ===== شريط الكبسولات الزمني ===== */
+#capsuleTimeline{
+    display:none;
+    width:100%;
+    box-sizing:border-box;
+    padding:8px 8px 10px;
+    background:#111827;
+}
+
+#capsuleViewport{
+    width:100%;
+    overflow-x:auto;
+    overflow-y:hidden;
+}
+
+#capsuleTimeInfo{
+    width:100%;
+    box-sizing:border-box;
+    text-align:center;
+    font-size:12px;
+    color:#ffffff;
+    margin-top:6px;
+    white-space:nowrap;
+}
+
+#timelineRuler{
+position:relative;
+height:22px;
+margin-bottom:4px;
+font-size:10px;
+color:#d1d5db;
+white-space:nowrap;
+}
+
+.timelineMark{
+position:absolute;
+top:0;
+transform:translateX(-50%);
+}
+
+#capsuleTrack{
+position:relative;
+height:44px;
+min-width:100%;
+background:#1f2937;
+border-radius:8px;
+overflow:hidden;
+}
+
+.subtitleCapsule{
+position:absolute;
+top:5px;
+height:34px;
+box-sizing:border-box;
+padding:4px 7px;
+border:1px solid #6b7280;
+border-radius:7px;
+background:#374151;
+color:#ffffff;
+font-size:12px;
+line-height:25px;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+text-align:center;
+}
+
+.subtitleCapsule.selectedCapsule{
+    border:2px solid #ffffff;
+    background:#4b5563;
+    box-shadow:0 0 0 2px #9ca3af;
+}
+
+.capsuleEndHandle{
+    position:absolute;
+    right:0;
+    top:0;
+    width:10px;
+    height:100%;
+    cursor:ew-resize;
+    background:#ffffff;
+    opacity:0;
+    touch-action:none;
+    z-index:5;
+}
+
+.capsuleStartHandle{
+    position:absolute;
+    left:0;
+    top:0;
+    width:10px;
+    height:100%;
+    cursor:ew-resize;
+    background:#ffffff;
+    opacity:0;
+    touch-action:none;
+    z-index:5;
+}
+
+.subtitleCapsule.selectedCapsule .capsuleStartHandle{
+    opacity:1;
+}
+
+.subtitleCapsule.selectedCapsule .capsuleEndHandle{
+    opacity:1;
+}
+
+.subtitleCapsule.selectedCapsule::before{
+    content:"";
+    position:absolute;
+    left:2px;
+    top:0;
+    bottom:0;
+    width:2px;
+    background:#ffffff;
+}
+
+.subtitleCapsule.selectedCapsule::after{
+    content:"";
+    position:absolute;
+    right:2px;
+    top:0;
+    bottom:0;
+    width:2px;
+    background:#ffffff;
 }
 
 </style>
@@ -270,7 +479,39 @@ controls>
 النص سيظهر هنا
 </div>
 
+<div id="backgroundOpacityPanel">
+    <input type="range" id="backgroundOpacityPicker" min="0" max="100" value="43" step="1">
+    <span id="backgroundOpacityValue">43%</span>
+    <button id="backgroundOpacityOk" type="button">OK</button>
 </div>
+
+</div>
+
+</div>
+
+<!-- ===== شريط الكبسولات الزمني ===== -->
+<div id="capsuleTimeline">
+
+    <div id="capsuleViewport">
+
+        <div id="timelineRuler"></div>
+
+        <div id="capsuleTrack"></div>
+
+    </div>
+
+    <div id="capsuleTimeInfo"></div>
+
+</div>
+
+<!-- ===== قائمة إصلاح الترجمة ===== -->
+<div id="subtitleEditorPanel">
+
+    <div id="subtitleEditorList"></div>
+
+    <button id="subtitleEditorOk" type="button">
+        OK
+    </button>
 
 </div>
 
@@ -298,6 +539,15 @@ controls>
     <div class="toolIcon colorTool" id="shadowColorPickerBtn" title="لون الظل">
         لون<br>الظل
         <input type="color" id="shadowColorPicker" value="#000000">
+    </div>
+
+    <div class="toolIcon colorTool" id="backgroundColorPickerBtn" title="لون الخلفية">
+        لون<br>الخلفية
+        <input type="color" id="backgroundColorPicker" value="#ffffff">
+    </div>
+
+    <div class="toolIcon colorTool" id="backgroundOpacityBtn" title="شفافية الخلفية">
+        شفافية<br>الخلفية
     </div>
 
     <div class="toolIcon colorTool" id="addTextBtn" title="إضافة عناوين">
@@ -337,6 +587,40 @@ textOverlay.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.cla
 const addTextBtn=document.getElementById("addTextBtn");
 const exportBtn=document.getElementById("exportBtn");
 const colorPicker = document.getElementById("colorPicker");
+const backgroundColorPicker = document.getElementById("backgroundColorPicker");
+
+backgroundColorPicker.oninput = () => {
+    const bgColor = backgroundColorPicker.value;
+    const r = parseInt(bgColor.slice(1, 3), 16);
+    const g = parseInt(bgColor.slice(3, 5), 16);
+    const b = parseInt(bgColor.slice(5, 7), 16);
+    const opacity = parseInt(backgroundOpacityPicker.value, 10) / 100;
+    subtitleOverlay.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+const backgroundOpacityPicker = document.getElementById("backgroundOpacityPicker");
+const backgroundOpacityBtn = document.getElementById("backgroundOpacityBtn");
+const backgroundOpacityPanel = document.getElementById("backgroundOpacityPanel");
+const backgroundOpacityValue = document.getElementById("backgroundOpacityValue");
+
+backgroundOpacityBtn.onclick = () => {
+    backgroundOpacityPanel.style.display = "flex";
+};
+
+backgroundOpacityPicker.oninput = () => {
+    backgroundOpacityValue.textContent = backgroundOpacityPicker.value + "%";
+    const opacity = parseInt(backgroundOpacityPicker.value, 10) / 100;
+    const bgColor = backgroundColorPicker.value;
+    const r = parseInt(bgColor.slice(1, 3), 16);
+    const g = parseInt(bgColor.slice(3, 5), 16);
+    const b = parseInt(bgColor.slice(5, 7), 16);
+    subtitleOverlay.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const backgroundOpacityOk = document.getElementById("backgroundOpacityOk");
+
+backgroundOpacityOk.onclick = () => {
+    backgroundOpacityPanel.style.display = "none";
+};
 colorPicker.oninput = () => {
     overlay.style.color = colorPicker.value;
 };
@@ -347,6 +631,297 @@ const pickVideoBtn=document.getElementById("pickVideoBtn");
 let currentSubtitleIndex = -1;
 let subtitles = [];
 let srtText = "";
+const capsuleTimeline = document.getElementById("capsuleTimeline");
+const timelineRuler = document.getElementById("timelineRuler");
+const capsuleTrack = document.getElementById("capsuleTrack");
+
+function timeStringToSeconds(value){
+    if(!value) return 0;
+
+    const parts = value.replace(",", ".").trim().split(":");
+
+    if(parts.length !== 3) return 0;
+
+    return (
+        parseFloat(parts[0]) * 3600 +
+        parseFloat(parts[1]) * 60 +
+        parseFloat(parts[2])
+    );
+}
+
+function secondsToTimeString(seconds){
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const milliseconds = Math.round((seconds - Math.floor(seconds)) * 1000);
+
+    return String(hours).padStart(2, "0") + ":" +
+           String(minutes).padStart(2, "0") + ":" +
+           String(secs).padStart(2, "0") + "," +
+           String(milliseconds).padStart(3, "0");
+}
+
+function renderCapsules(){
+
+    if(!subtitles || subtitles.length === 0){
+        capsuleTimeline.style.display = "none";
+        return;
+    }
+
+    const duration = video.duration;
+
+    if(!duration || !isFinite(duration)){
+        return;
+    }
+
+    capsuleTimeline.style.display = "block";
+
+    document.getElementById("capsuleTimeInfo").textContent =
+        "مدة الفيديو: " + secondsToTimeString(duration);
+
+    timelineRuler.innerHTML = "";
+    capsuleTrack.innerHTML = "";
+
+    /* ===== عرض زمني حقيقي للشريط ===== */
+    const timelineWidth = Math.max(100, duration * 20);
+
+    timelineRuler.style.width = timelineWidth + "px";
+    capsuleTrack.style.width = timelineWidth + "px";
+
+    const markCount = Math.max(1, Math.ceil(duration / 5));
+
+    for(let i = 0; i <= markCount; i++){
+
+        const seconds = Math.min(i * 5, duration);
+        const position = (seconds / duration) * 100;
+
+        const mark = document.createElement("span");
+        mark.className = "timelineMark";
+        mark.style.left = position + "%";
+        mark.textContent = Math.round(seconds) + "s";
+
+        timelineRuler.appendChild(mark);
+    }
+
+    subtitles.forEach((subtitle, index) => {
+
+        const start = timeStringToSeconds(subtitle.start);
+        const end = timeStringToSeconds(subtitle.end);
+
+        if(end <= start) return;
+
+        const left = Math.max(
+            0,
+            Math.min(100, (start / duration) * 100)
+        );
+
+        const width = Math.max(
+            0.5,
+            Math.min(
+                100 - left,
+                ((end - start) / duration) * 100
+            )
+        );
+
+        const capsule = document.createElement("div");
+
+        capsule.className = "subtitleCapsule";
+        capsule.style.left = left + "%";
+        capsule.style.width = width + "%";
+
+        const startHandle = document.createElement("div");
+
+        startHandle.className = "capsuleStartHandle";
+
+        capsule.appendChild(startHandle);
+
+        const endHandle = document.createElement("div");
+
+        endHandle.className = "capsuleEndHandle";
+
+        capsule.appendChild(endHandle);
+
+        capsule.appendChild(document.createTextNode(subtitle.text || ""));
+
+        capsule.title =
+            (subtitle.text || "") +
+            "\n" +
+            subtitle.start +
+            " → " +
+            subtitle.end;
+
+        capsule.dataset.index = index;
+
+        endHandle.addEventListener("pointerdown", (e) => {
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            endHandle.setPointerCapture(e.pointerId);
+
+            const startTime = timeStringToSeconds(subtitle.start);
+
+            const onPointerMove = (moveEvent) => {
+
+                const rect = capsuleTrack.getBoundingClientRect();
+
+                if(!rect.width){
+                    return;
+                }
+
+                const x = moveEvent.clientX - rect.left;
+
+                const nextSubtitle = subtitles[index + 1];
+
+                const maxEnd = nextSubtitle
+                    ? timeStringToSeconds(nextSubtitle.start)
+                    : duration;
+
+                const newEnd = Math.max(
+                    startTime + 0.1,
+                    Math.min(maxEnd, (x / rect.width) * duration)
+                );
+
+                subtitle.end = secondsToTimeString(newEnd);
+
+                srtText = buildSrt(subtitles);
+
+                capsule.style.width =
+                    Math.max(
+                        0.5,
+                        ((newEnd - startTime) / duration) * 100
+                    ) + "%";
+
+                capsule.title =
+                    (subtitle.text || "") +
+                    "\n" +
+                    subtitle.start +
+                    " → " +
+                    subtitle.end;
+
+                const capsuleTimeInfo =
+                    document.getElementById("capsuleTimeInfo");
+
+                capsuleTimeInfo.textContent =
+                    subtitle.start + " → " + subtitle.end;
+            };
+
+            const onPointerUp = (upEvent) => {
+
+                endHandle.releasePointerCapture(upEvent.pointerId);
+
+                endHandle.removeEventListener("pointermove", onPointerMove);
+                endHandle.removeEventListener("pointerup", onPointerUp);
+                endHandle.removeEventListener("pointercancel", onPointerUp);
+
+                renderCapsules();
+            };
+
+            endHandle.addEventListener("pointermove", onPointerMove);
+            endHandle.addEventListener("pointerup", onPointerUp);
+            endHandle.addEventListener("pointercancel", onPointerUp);
+        });
+
+        startHandle.addEventListener("pointerdown", (e) => {
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            startHandle.setPointerCapture(e.pointerId);
+
+            const endTime = timeStringToSeconds(subtitle.end);
+
+            const onPointerMove = (moveEvent) => {
+
+                const rect = capsuleTrack.getBoundingClientRect();
+
+                if(!rect.width){
+                    return;
+                }
+
+                const x = moveEvent.clientX - rect.left;
+
+                const previousSubtitle = subtitles[index - 1];
+
+                const minStart = previousSubtitle
+                    ? timeStringToSeconds(previousSubtitle.end)
+                    : 0;
+
+                const newStart = Math.max(
+                    minStart,
+                    Math.min(endTime - 0.1, (x / rect.width) * duration)
+                );
+
+                subtitle.start = secondsToTimeString(newStart);
+
+                srtText = buildSrt(subtitles);
+
+                capsule.style.left =
+                    (newStart / duration) * 100 + "%";
+
+                capsule.style.width =
+                    Math.max(
+                        0.5,
+                        ((endTime - newStart) / duration) * 100
+                    ) + "%";
+
+                capsule.title =
+                    (subtitle.text || "") +
+                    "\n" +
+                    subtitle.start +
+                    " → " +
+                    subtitle.end;
+
+                const capsuleTimeInfo =
+                    document.getElementById("capsuleTimeInfo");
+
+                capsuleTimeInfo.textContent =
+                    subtitle.start + " → " + subtitle.end;
+            };
+
+            const onPointerUp = (upEvent) => {
+
+                startHandle.releasePointerCapture(upEvent.pointerId);
+
+                startHandle.removeEventListener("pointermove", onPointerMove);
+                startHandle.removeEventListener("pointerup", onPointerUp);
+                startHandle.removeEventListener("pointercancel", onPointerUp);
+
+                renderCapsules();
+            };
+
+            startHandle.addEventListener("pointermove", onPointerMove);
+            startHandle.addEventListener("pointerup", onPointerUp);
+            startHandle.addEventListener("pointercancel", onPointerUp);
+        });
+
+        capsule.addEventListener("click", () => {
+
+            document
+                .querySelectorAll(".subtitleCapsule.selectedCapsule")
+                .forEach(el => el.classList.remove("selectedCapsule"));
+
+            capsule.classList.add("selectedCapsule");
+
+            currentSubtitleIndex = index;
+
+            const startTime = timeStringToSeconds(subtitle.start);
+
+            if(isFinite(startTime)){
+                video.currentTime = startTime;
+            }
+
+            overlay.textContent = subtitle.text || "";
+
+            const capsuleTimeInfo = document.getElementById("capsuleTimeInfo");
+
+            capsuleTimeInfo.textContent =
+                subtitle.start + " → " + subtitle.end;
+        });
+
+        capsuleTrack.appendChild(capsule);
+    });
+}
 function buildSrt(subtitles){
     return subtitles.map((s,i)=>`${i+1}
 ${s.start} --> ${s.end}
@@ -457,23 +1032,274 @@ subtitleBtn.onclick=()=>{
         return;
     }
 
-    let index=currentSubtitleIndex;
+    const editorPanel = document.getElementById("subtitleEditorPanel");
+    const editorList = document.getElementById("subtitleEditorList");
 
-    if(index===-1){
-        index=0;
-        currentSubtitleIndex=0;
-    }
+    editorList.innerHTML = "";
 
-    const currentText=subtitles[index].text || "";
-    const text=prompt("عدل الترجمة:",currentText);
+    subtitles.forEach((subtitle, index) => {
 
-    if(text===null)return;
+        const item = document.createElement("div");
 
-    subtitles[index].text=text;
-    srtText=buildSrt(subtitles);
+        item.className = "subtitleEditorItem";
+        item.contentEditable = "true";
+        item.textContent = subtitle.text || "";
+        item.dataset.index = index;
 
-    overlay.textContent=text;
-    status.textContent="تم تعديل الترجمة";
+        item.addEventListener("focus", () => {
+
+            currentSubtitleIndex = index;
+
+            const startTime = timeStringToSeconds(subtitle.start);
+
+            if(isFinite(startTime)){
+                video.currentTime = startTime;
+            }
+
+            overlay.textContent = item.textContent;
+        });
+
+        item.addEventListener("input", () => {
+
+            subtitles[index].text = item.innerText.trim();
+
+            srtText = buildSrt(subtitles);
+
+            if(currentSubtitleIndex === index){
+                overlay.textContent = item.innerText.trim();
+            }
+        });
+
+        item.addEventListener("keydown", (e) => {
+
+            if(e.key === "Backspace"){
+
+                const selection = window.getSelection();
+
+                if(!selection || selection.rangeCount === 0){
+                    return;
+                }
+
+                const range = selection.getRangeAt(0);
+
+                if(!item.contains(range.startContainer)){
+                    return;
+                }
+
+                const text = item.innerText;
+                const cursorPosition = (() => {
+                    const preRange = document.createRange();
+                    preRange.selectNodeContents(item);
+                    preRange.setEnd(range.startContainer, range.startOffset);
+                    return preRange.toString().length;
+                })();
+
+                if(cursorPosition !== 0){
+                    return;
+                }
+
+                if(index <= 0){
+                    return;
+                }
+
+                e.preventDefault();
+
+                const previousSubtitle = subtitles[index - 1];
+                const currentSubtitle = subtitles[index];
+
+                previousSubtitle.text =
+                    (previousSubtitle.text + " " + currentSubtitle.text).trim();
+
+                previousSubtitle.end = currentSubtitle.end;
+
+                subtitles.splice(index, 1);
+
+                srtText = buildSrt(subtitles);
+
+                editorList.innerHTML = "";
+
+                subtitles.forEach((subtitle, newIndex) => {
+
+                    const newItem = document.createElement("div");
+
+                    newItem.className = "subtitleEditorItem";
+                    newItem.contentEditable = "true";
+                    newItem.textContent = subtitle.text || "";
+                    newItem.dataset.index = newIndex;
+
+                    newItem.addEventListener("focus", () => {
+
+                        currentSubtitleIndex = newIndex;
+
+                        const startTime = timeStringToSeconds(subtitle.start);
+
+                        if(isFinite(startTime)){
+                            video.currentTime = startTime;
+                        }
+
+                        overlay.textContent = newItem.textContent;
+                    });
+
+                    newItem.addEventListener("input", () => {
+
+                        subtitles[newIndex].text = newItem.innerText.trim();
+
+                        srtText = buildSrt(subtitles);
+
+                        if(currentSubtitleIndex === newIndex){
+                            overlay.textContent = newItem.innerText.trim();
+                        }
+                    });
+
+                    editorList.appendChild(newItem);
+                });
+
+                const mergedItem = editorList.querySelectorAll(".subtitleEditorItem")[index - 1];
+
+                if(mergedItem){
+                    mergedItem.focus();
+
+                    const mergedRange = document.createRange();
+                    mergedRange.selectNodeContents(mergedItem);
+                    mergedRange.collapse(false);
+
+                    const mergedSelection = window.getSelection();
+                    mergedSelection.removeAllRanges();
+                    mergedSelection.addRange(mergedRange);
+                }
+
+                currentSubtitleIndex = index - 1;
+
+                status.textContent="تم دمج الجزأين";
+
+                return;
+            }
+
+            if(e.key !== "Enter"){
+                return;
+            }
+
+            e.preventDefault();
+
+            const selection = window.getSelection();
+
+            if(!selection || selection.rangeCount === 0){
+                return;
+            }
+
+            const range = selection.getRangeAt(0);
+
+            if(!item.contains(range.startContainer)){
+                return;
+            }
+
+            const text = item.innerText;
+            const cursorPosition = (() => {
+                const preRange = document.createRange();
+                preRange.selectNodeContents(item);
+                preRange.setEnd(range.startContainer, range.startOffset);
+                return preRange.toString().length;
+            })();
+
+            const firstText = text.slice(0, cursorPosition).trim();
+            const secondText = text.slice(cursorPosition).trim();
+
+            if(!firstText || !secondText){
+                return;
+            }
+
+            const originalStart = timeStringToSeconds(subtitles[index].start);
+            const originalEnd = timeStringToSeconds(subtitles[index].end);
+
+            const middleTime = originalStart + ((originalEnd - originalStart) / 2);
+
+            const middleTimeString = secondsToTimeString(middleTime);
+
+            subtitles[index].text = firstText;
+            subtitles[index].end = middleTimeString;
+
+            subtitles.splice(index + 1, 0, {
+                start: middleTimeString,
+                end: secondsToTimeString(originalEnd),
+                text: secondText
+            });
+
+            srtText = buildSrt(subtitles);
+
+            editorList.innerHTML = "";
+
+            subtitles.forEach((subtitle, newIndex) => {
+
+                const newItem = document.createElement("div");
+
+                newItem.className = "subtitleEditorItem";
+                newItem.contentEditable = "true";
+                newItem.textContent = subtitle.text || "";
+                newItem.dataset.index = newIndex;
+
+                newItem.addEventListener("focus", () => {
+
+                    currentSubtitleIndex = newIndex;
+
+                    const startTime = timeStringToSeconds(subtitle.start);
+
+                    if(isFinite(startTime)){
+                        video.currentTime = startTime;
+                    }
+
+                    overlay.textContent = newItem.textContent;
+                });
+
+                newItem.addEventListener("input", () => {
+
+                    subtitles[newIndex].text = newItem.innerText.trim();
+
+                    srtText = buildSrt(subtitles);
+
+                    if(currentSubtitleIndex === newIndex){
+                        overlay.textContent = newItem.innerText.trim();
+                    }
+                });
+
+                editorList.appendChild(newItem);
+            });
+
+            const newItems = editorList.querySelectorAll(".subtitleEditorItem");
+
+            if(newItems[index + 1]){
+                newItems[index + 1].focus();
+
+                const newRange = document.createRange();
+                newRange.selectNodeContents(newItems[index + 1]);
+                newRange.collapse(false);
+
+                const newSelection = window.getSelection();
+                newSelection.removeAllRanges();
+                newSelection.addRange(newRange);
+            }
+
+            status.textContent="تم تقسيم الجملة";
+        });
+
+        editorList.appendChild(item);
+    });
+
+    editorPanel.style.display = "block";
+
+    status.textContent="وضع إصلاح الترجمة";
+};
+
+document.getElementById("subtitleEditorOk").onclick=()=>{
+
+    srtText = buildSrt(subtitles);
+
+    document.getElementById("subtitleEditorPanel").style.display = "none";
+
+    capsuleTimeline.style.display = "block";
+
+    renderCapsules();
+
+    status.textContent="تم حفظ تعديلات الترجمة";
 };
 
 exportBtn.onclick=async()=>{
@@ -498,6 +1324,7 @@ const scaleVal = (typeof scale !== "undefined" && scale) ? scale : 1.0;
 formData.append("subtitle_left", leftVal);
 formData.append("subtitle_top", topVal);
 formData.append("subtitle_scale", scaleVal);
+formData.append("font", currentFont);
 // جمع بيانات النصوص اليدوية
 const customTexts = [];
 Array.from(document.getElementById("textLayer").children).forEach(el => {
@@ -517,6 +1344,8 @@ Array.from(document.getElementById("textLayer").children).forEach(el => {
 formData.append("custom_texts", JSON.stringify(customTexts));
 formData.append("subtitle_color", colorPicker.value);
 formData.append("shadow_color", shadowColorPicker.value);
+formData.append("background_color", backgroundColorPicker.value);
+formData.append("background_opacity", backgroundOpacityPicker.value);
 formData.append("font", currentFont);
 
 status.textContent="جاري تصدير الفيديو...";
@@ -592,6 +1421,11 @@ srtText = buildSrt(data.subtitles || []);
 status.textContent="تمت المعالجة";
 uploadBtn.textContent="تمت المعالجة";
 
+if(video.readyState >= 1){
+    renderCapsules();
+}else{
+    video.addEventListener("loadedmetadata", renderCapsules, { once:true });
+}
 if(data.text){
 result.value=data.text;
 }
@@ -601,8 +1435,8 @@ if(data.subtitles){
 video.ontimeupdate=()=>{
 
 const t=video.currentTime;
+const current=subtitles.find(s=>{
 
-const current=data.subtitles.find(s=>{
 
 const a=s.start.replace(",",".").split(":");
 const b=s.end.replace(",",".").split(":");
@@ -610,13 +1444,12 @@ const b=s.end.replace(",",".").split(":");
 const start=(+a[0])*3600+(+a[1])*60+parseFloat(a[2]);
 const end=(+b[0])*3600+(+b[1])*60+parseFloat(b[2]);
 
-return t>=start && t<=end;
+return t>=start && t<end;
 
 });
 
 overlay.textContent = current ? current.text.replace(/^\s*\[?\d+\]?\s*/, "") : "";
-currentSubtitleIndex = current ? data.subtitles.indexOf(current) : -1;
-
+currentSubtitleIndex = current ? subtitles.indexOf(current) : -1;
 };
 
 }
