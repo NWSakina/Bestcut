@@ -30,23 +30,39 @@ height:100vh;
 }
 
 header{
-height:10vh;
+height:7vh;
 display:flex;
-flex-direction:column;
-justify-content:center;
+flex-direction:row;
+direction:ltr;
+justify-content:space-between;
 align-items:center;
+padding:0 20px;
 background:#111827;
 border-bottom:1px solid #273449;
 }
 
 header h1{
 font-size:34px;
+font-weight:bold;
+text-shadow:
+0 0 1px #fff3b0,
+0 0 3px #d4af37,
+0 0 6px #d4af37,
+0 0 10px rgba(212,175,55,.9);
 }
 
 header p{
-margin-top:4px;
-font-size:14px;
-color:#9ca3af;
+margin-top:0;
+font-size:18px;
+color:#ffffff;
+width:50%;
+text-align:right;
+line-height:1.2;
+text-shadow:
+0 0 1px #fff3b0,
+0 0 3px #d4af37,
+0 0 6px #d4af37,
+0 0 10px rgba(212,175,55,.9);
 }
 
 .viewer{
@@ -88,20 +104,20 @@ background:#000;
 
 #subtitleOverlay{
 position:absolute;
-top:22%;
+top:30%;
 left:50%;
 transform:translate(-50%,-50%);
 display:block;
-width:78%;
-max-width:78%;
+width:70%;
+max-width:70%;
 padding:10px 18px;
 background:rgba(255,255,255,.16);
 border:1px solid rgba(255,255,255,.22);
-border-radius:10px;
+border-radius:24px;
 backdrop-filter:blur(2px);
 -webkit-backdrop-filter:blur(2px);
 color:#fff;
-font-size:22px;
+font-size:20px;
 font-weight:bold;
 text-align:center;
 line-height:1.4;
@@ -112,37 +128,39 @@ pointer-events:none;
 }
 
 #textOverlay{
-position:absolute;
-left:50%;
-bottom:8%;
-transform:translateX(-50%);
-width: max-content !important;
-min-width: auto !important;
-max-width: none !important;
-height: auto !important;
-min-height: auto !important;
-max-height: none !important;
-white-space: nowrap !important;
-padding:14px 20px;
-border-radius:16px;
-background:rgba(255,255,255,.18);
-backdrop-filter:blur(8px);
-border:2px dashed rgba(255,255,255,.45);
-color:#fff;
-font-size:24px;
-font-weight:bold;
-text-align:center;
-outline:none;
-display:none;
-z-index:20;
-pointer-events:auto;
+    position:absolute;
+    left:50%;
+    bottom:8%;
+    transform:translateX(-50%);
+    width:max-content !important;
+    min-width:auto !important;
+    max-width:none !important;
+    height:auto !important;
+    min-height:auto !important;
+    max-height:none !important;
+    white-space:nowrap !important;
+    padding:10px 18px;
+    border-radius:16px; 
+    background:#ffffff;
+    backdrop-filter:blur(4px);
+    border:1px solid rgba(0,0,0,.9);
+    color:#fff;
+    font-family:'Scheherazade New', sans-serif;
+    font-size:20px;
+    font-weight:bold;
+    text-align:center;
+    outline:none;
+    display:none;
+    z-index:20;
+    pointer-events:auto;
 }
+
 .selected{
 border:2px solid #00bfff !important;
 }
 
 .toolbar{
-height:100px;
+height:90px;
 width:95%;
 max-width:420px;
 margin:0 auto;
@@ -206,17 +224,46 @@ cursor:pointer;
     font-weight:bold;
 }
 
+#colorTargetMenu {
+    display:none;
+    position:absolute;
+    left:50%;
+    bottom:70px;
+    transform:translateX(-50%);
+    z-index:1000;
+    flex-direction:row;
+    gap:8px;
+    padding:8px;
+    background:rgba(0,0,0,.85);
+    border:1px solid rgba(255,255,255,.25);
+    border-radius:10px;
+    white-space:nowrap;
+}
+
+#colorTargetMenu button {
+    padding:8px 14px;
+    border:none;
+    border-radius:6px;
+    background:#374151;
+    color:#fff;
+    font-size:13px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
 #backgroundOpacityPanel {
     display:none;
     position:absolute;
     left:50%;
-    bottom:88px;
+    bottom:130px;
+    width:min(90vw,360px);
+    box-sizing:border-box;
     transform:translateX(-50%);
     align-items:center;
     gap:8px;
     z-index:1000;
     padding:6px 8px;
-    background:rgba(17,24,39,.92);
+    background:#ffffff;
     border-radius:16px;
     pointer-events:none;
 }
@@ -232,6 +279,30 @@ cursor:pointer;
     height:4px;
     accent-color:#d4af37;
     cursor:pointer;
+}
+
+#exportProgressPanel {
+    display:none;
+    position:absolute;
+    left:50%;
+    bottom:130px;
+    width:min(90vw,360px);
+    height:6px;
+    box-sizing:border-box;
+    transform:translateX(-50%);
+    z-index:1000;
+    padding:0;
+    background:#ffffff;
+    border-radius:16px;
+    overflow:hidden;
+}
+
+#exportProgressBar {
+    width:0%;
+    height:100%;
+    background:#d4af37;
+    border-radius:16px;
+    transition:width .2s ease;
 }
 
 #backgroundOpacityValue {
@@ -255,11 +326,10 @@ cursor:pointer;
 
 .colorTool input[type="color"] {
     position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
+    width:1px;
+    height:1px;
     opacity:0;
-    cursor:pointer;
+    pointer-events:none;
 }
 
 .toolIcon:hover{
@@ -344,10 +414,11 @@ display:none;
     color:#ffffff;
     margin-top:6px;
     white-space:nowrap;
+    transform:translateY(2px);
 }
 
 #timelineRuler{
-position:relative;
+display:none;
 height:22px;
 margin-bottom:4px;
 font-size:10px;
@@ -363,7 +434,7 @@ transform:translateX(-50%);
 
 #capsuleTrack{
 position:relative;
-height:44px;
+height:38px;
 min-width:100%;
 background:#1f2937;
 border-radius:8px;
@@ -373,7 +444,7 @@ overflow:hidden;
 .subtitleCapsule{
 position:absolute;
 top:5px;
-height:34px;
+height:33px;
 box-sizing:border-box;
 padding:4px 7px;
 border:1px solid #6b7280;
@@ -471,8 +542,15 @@ controls>
 
 <div id="textLayer"></div>
 
+اكتب النص...
+
 <div id="textOverlay" contenteditable="true">
 اكتب النص...
+</div>
+
+<div id="colorTargetMenu">
+    <button type="button" id="colorTargetSubtitle">الترجمة</button>
+    <button type="button" id="colorTargetCustom">العناوين</button>
 </div>
 
 <div id="subtitleOverlay">
@@ -480,9 +558,15 @@ controls>
 </div>
 
 <div id="backgroundOpacityPanel">
+    <button type="button" id="backgroundOpacitySubtitle">الترجمة</button>
+    <button type="button" id="backgroundOpacityCustom">العناوين</button>
     <input type="range" id="backgroundOpacityPicker" min="0" max="100" value="43" step="1">
     <span id="backgroundOpacityValue">43%</span>
     <button id="backgroundOpacityOk" type="button">OK</button>
+</div>
+
+<div id="exportProgressPanel">
+    <div id="exportProgressBar"></div>
 </div>
 
 </div>
@@ -533,6 +617,7 @@ controls>
 
     <div class="toolIcon colorTool" id="colorPickerBtn" title="لون الخط">
         لون<br>الخط
+
         <input type="color" id="colorPicker" value="#ffffff">
     </div>
 
@@ -586,34 +671,136 @@ const textOverlay=document.getElementById("textOverlay");
 textOverlay.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));textOverlay.classList.add("selected");};
 const addTextBtn=document.getElementById("addTextBtn");
 const exportBtn=document.getElementById("exportBtn");
+let colorTarget = "subtitle";
+let backgroundOpacityTarget = "subtitle";
+
+let subtitleTextColor = "#ffffff";
+let customTextColor = "#ffffff";
+
+let subtitleShadowColor = "#000000";
+let customShadowColor = "#000000";
+
+let subtitleBackgroundColor = "#ffffff";
+let customBackgroundColor = "#ffffff";
+
+let subtitleBackgroundOpacity = 43;
+let customBackgroundOpacity = 43;
+
 const colorPicker = document.getElementById("colorPicker");
+let activeColorPicker = colorPicker;
+
+const colorPickerBtn = document.getElementById("colorPickerBtn");
+const colorTargetMenu = document.getElementById("colorTargetMenu");
+
+colorPickerBtn.onclick = () => {
+    activeColorPicker = colorPicker;
+    colorTargetMenu.style.display =
+        colorTargetMenu.style.display === "flex" ? "none" : "flex";
+};
+
+const colorTargetSubtitle = document.getElementById("colorTargetSubtitle");
+const colorTargetCustom = document.getElementById("colorTargetCustom");
+
+colorTargetSubtitle.onclick = () => {
+    colorTarget = "subtitle";
+    colorPicker.value = subtitleTextColor;
+    colorTargetMenu.style.display = "none";
+    activeColorPicker.click();
+};
+
+colorTargetCustom.onclick = () => {
+    colorTarget = "custom";
+    colorPicker.value = customTextColor;
+    colorTargetMenu.style.display = "none";
+    activeColorPicker.click();
+};
+
 const backgroundColorPicker = document.getElementById("backgroundColorPicker");
+const backgroundColorPickerBtn = document.getElementById("backgroundColorPickerBtn");
+const shadowColorPickerBtn = document.getElementById("shadowColorPickerBtn");
+
+shadowColorPickerBtn.onclick = () => {
+    activeColorPicker = shadowColorPicker;
+    colorTargetMenu.style.display =
+        colorTargetMenu.style.display === "flex" ? "none" : "flex";
+};
+
+backgroundColorPickerBtn.onclick = () => {
+    activeColorPicker = backgroundColorPicker;
+    colorTargetMenu.style.display =
+        colorTargetMenu.style.display === "flex" ? "none" : "flex";
+};
 
 backgroundColorPicker.oninput = () => {
     const bgColor = backgroundColorPicker.value;
+
+    if (colorTarget === "subtitle") {
+        subtitleBackgroundColor = bgColor;
+    } else if (colorTarget === "custom") {
+        customBackgroundColor = bgColor;
+    }
+
+    const opacity = parseInt(backgroundOpacityPicker.value, 10) / 100;
     const r = parseInt(bgColor.slice(1, 3), 16);
     const g = parseInt(bgColor.slice(3, 5), 16);
     const b = parseInt(bgColor.slice(5, 7), 16);
-    const opacity = parseInt(backgroundOpacityPicker.value, 10) / 100;
-    subtitleOverlay.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    const background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+
+    if (colorTarget === "subtitle") {
+        subtitleOverlay.style.background = background;
+    } else if (colorTarget === "custom") {
+        document.querySelectorAll("#textLayer > div").forEach(el => {
+            el.style.background = background;
+        });
+    }
 };
+
 const backgroundOpacityPicker = document.getElementById("backgroundOpacityPicker");
 const backgroundOpacityBtn = document.getElementById("backgroundOpacityBtn");
 const backgroundOpacityPanel = document.getElementById("backgroundOpacityPanel");
 const backgroundOpacityValue = document.getElementById("backgroundOpacityValue");
+const backgroundOpacitySubtitle = document.getElementById("backgroundOpacitySubtitle");
+const backgroundOpacityCustom = document.getElementById("backgroundOpacityCustom");
+
+backgroundOpacitySubtitle.onclick = () => {
+};
+
+backgroundOpacityCustom.onclick = () => {
+    backgroundOpacityTarget = "custom";
+};
 
 backgroundOpacityBtn.onclick = () => {
+    backgroundOpacityTarget = "subtitle";
     backgroundOpacityPanel.style.display = "flex";
 };
 
 backgroundOpacityPicker.oninput = () => {
     backgroundOpacityValue.textContent = backgroundOpacityPicker.value + "%";
-    const opacity = parseInt(backgroundOpacityPicker.value, 10) / 100;
-    const bgColor = backgroundColorPicker.value;
+
+    const opacityValue = parseInt(backgroundOpacityPicker.value, 10);
+
+    if (backgroundOpacityTarget === "subtitle") {
+        subtitleBackgroundOpacity = opacityValue;
+    } else if (backgroundOpacityTarget === "custom") {
+        customBackgroundOpacity = opacityValue;
+    }
+
+    const opacity = opacityValue / 100;
+    const bgColor = backgroundOpacityTarget === "subtitle"
+        ? subtitleBackgroundColor
+        : customBackgroundColor;
     const r = parseInt(bgColor.slice(1, 3), 16);
     const g = parseInt(bgColor.slice(3, 5), 16);
     const b = parseInt(bgColor.slice(5, 7), 16);
-    subtitleOverlay.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    const background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+
+    if (backgroundOpacityTarget === "subtitle") {
+        subtitleOverlay.style.background = background;
+    } else if (backgroundOpacityTarget === "custom") {
+        document.querySelectorAll("#textLayer > div").forEach(el => {
+            el.style.background = background;
+        });
+    }
 };
 
 const backgroundOpacityOk = document.getElementById("backgroundOpacityOk");
@@ -621,9 +808,19 @@ const backgroundOpacityOk = document.getElementById("backgroundOpacityOk");
 backgroundOpacityOk.onclick = () => {
     backgroundOpacityPanel.style.display = "none";
 };
+
 colorPicker.oninput = () => {
-    overlay.style.color = colorPicker.value;
+    if (colorTarget === "subtitle") {
+        subtitleTextColor = colorPicker.value;
+        subtitleOverlay.style.color = subtitleTextColor;
+    } else if (colorTarget === "custom") {
+        customTextColor = colorPicker.value;
+        document.querySelectorAll("#textLayer > div").forEach(el => {
+            el.style.color = customTextColor;
+        });
+    }
 };
+
 const subtitleBtn=document.getElementById("subtitleBtn");
 const uploadBtn=document.getElementById("uploadBtn");
 const videoFile=document.getElementById("videoFile");
@@ -687,21 +884,6 @@ function renderCapsules(){
 
     timelineRuler.style.width = timelineWidth + "px";
     capsuleTrack.style.width = timelineWidth + "px";
-
-    const markCount = Math.max(1, Math.ceil(duration / 5));
-
-    for(let i = 0; i <= markCount; i++){
-
-        const seconds = Math.min(i * 5, duration);
-        const position = (seconds / duration) * 100;
-
-        const mark = document.createElement("span");
-        mark.className = "timelineMark";
-        mark.style.left = position + "%";
-        mark.textContent = Math.round(seconds) + "s";
-
-        timelineRuler.appendChild(mark);
-    }
 
     subtitles.forEach((subtitle, index) => {
 
@@ -947,90 +1129,126 @@ videoFile.click();
 };
 
 addTextBtn.onclick=()=>{
-const copy=textOverlay.cloneNode(true);
-copy.removeAttribute("id");
-copy.style.whiteSpace = "nowrap";
-copy.style.width = "max-content";
-copy.style.maxWidth = "none";
-copy.contentEditable="true";
-copy.style.pointerEvents="auto";
-copy.style.display="block"; copy.style.position="absolute";
-copy.style.top="40px"; 
-copy.style.left="50%";
-copy.style.transform="translateX(-50%)"; // إضافة خاصية التوسيط
-copy.textContent="";
-const offsetCount = textLayer.children.length;
-copy.style.position = "absolute";
-copy.style.top = (35 + (offsetCount * 40)) + "px";
-textLayer.appendChild(copy);
+    const copy=textOverlay.cloneNode(true);
+    copy.removeAttribute("id");
+    copy.style.whiteSpace = "nowrap";
+    copy.style.width = "max-content";
+    copy.style.maxWidth = "none";
+    copy.style.fontSize = "32px";
+    copy.style.background = "rgba(255,255,255,0.18)";
+    copy.style.borderRadius = "16px";
+    copy.contentEditable="true";
+    copy.style.pointerEvents="auto";
+    copy.style.display="block";
+    copy.style.position="absolute";
+    copy.style.top="40px";
+    copy.style.left="50%";
+    copy.style.transform="translateX(-50%)";
+    copy.textContent="";
 
-// --- آلية الحركة والتحجيم باللمس ---
-let isDragging = false;
-let startX = 0, startY = 0;
-let initialLeft = 0, initialTop = 0;
+    const offsetCount = textLayer.children.length;
+    copy.style.position = "absolute";
+    copy.style.top = (35 + (offsetCount * 40)) + "px";
+    textLayer.appendChild(copy);
 
-copy.scale = 1;
-copy.lastDistance = null;
+    // --- آلية الحركة والتحجيم باللمس ---
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
 
-copy.addEventListener('touchstart', function(e) {
-    if (e.touches.length === 1) {
-        isDragging = true;
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-
-        const rect = copy.getBoundingClientRect();
-        const parentRect = textLayer.getBoundingClientRect();
-        initialLeft = rect.left - parentRect.left;
-        initialTop = rect.top - parentRect.top;
-
-        copy.style.right = 'auto';
-        copy.style.transform = 'none';
-        copy.style.left = initialLeft + 'px';
-        copy.style.top = initialTop + 'px';
-    } else if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        copy.lastDistance = Math.hypot(dx, dy);
-    }
-}, { passive: false });
-
-window.addEventListener('touchmove', function(e) {
-    if (e.touches.length === 1 && isDragging) {
-        e.preventDefault();
-        const dx = e.touches[0].clientX - startX;
-        const dy = e.touches[0].clientY - startY;
-        copy.style.left = (initialLeft + dx) + 'px';
-        copy.style.top = (initialTop + dy) + 'px';
-    } else if (e.touches.length === 2 && e.target === copy) {
-        e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const distance = Math.hypot(dx, dy);
-
-        if (copy.lastDistance) {
-            const scaleFactor = distance / copy.lastDistance;
-            copy.scale *= scaleFactor;
-            copy.scale = Math.max(0.5, Math.min(copy.scale, 3));
-            copy.style.transform = `scale(${copy.scale})`;
-        }
-        copy.lastDistance = distance;
-    }
-}, { passive: false });
-
-window.addEventListener('touchend', function(e) {
-    isDragging = false;
+    copy.scale = 1;
     copy.lastDistance = null;
-});
-copy.focus();
-copy.onclick=()=>{document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));copy.classList.add("selected");};
-copy.tabIndex=0;
+    copy.currentLeft = null;
+    copy.currentTop = null;
+
+    copy.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+            isDragging = true;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+
+            const rect = copy.getBoundingClientRect();
+            const parentRect = textLayer.getBoundingClientRect();
+
+            initialLeft = rect.left - parentRect.left;
+            initialTop = rect.top - parentRect.top;
+
+            copy.style.right = 'auto';
+
+            if (copy.currentLeft === null) {
+                copy.currentLeft = initialLeft;
+            }
+
+            if (copy.currentTop === null) {
+                copy.currentTop = initialTop;
+            }
+
+            copy.style.left = copy.currentLeft + 'px';
+            copy.style.top = copy.currentTop + 'px';
+        } else if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            copy.lastDistance = Math.hypot(dx, dy);
+        }
+    }, { passive: false });
+
+    window.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 1 && isDragging) {
+            e.preventDefault();
+
+            const dx = e.touches[0].clientX - startX;
+            const dy = e.touches[0].clientY - startY;
+
+            copy.currentLeft = initialLeft + dx;
+            copy.currentTop = initialTop + dy;
+
+            copy.style.left = copy.currentLeft + 'px';
+            copy.style.top = copy.currentTop + 'px';
+
+        } else if (e.touches.length === 2 && e.target === copy) {
+            e.preventDefault();
+
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const distance = Math.hypot(dx, dy);
+
+            if (copy.lastDistance) {
+                const scaleFactor = distance / copy.lastDistance;
+
+                copy.scale *= scaleFactor;
+                copy.scale = Math.max(0.5, Math.min(copy.scale, 3));
+
+                copy.style.transform = `scale(${copy.scale})`;
+            }
+
+            copy.lastDistance = distance;
+        }
+    }, { passive: false });
+
+    window.addEventListener('touchend', function(e) {
+        isDragging = false;
+        copy.lastDistance = null;
+    });
+
+    copy.focus();
+
+    copy.onclick=()=>{
+        document.querySelectorAll(".selected").forEach(e=>e.classList.remove("selected"));
+        copy.classList.add("selected");
+        backgroundOpacityTarget = "custom";
+    };
+
+    copy.tabIndex=0;
 };
 
 subtitleBtn.onclick=()=>{
+    backgroundOpacityTarget = "subtitle";
     if(!subtitles || subtitles.length===0){
         alert("قم بمعالجة الفيديو أولاً لإنشاء الترجمة.");
         return;
     }
+
+    capsuleTimeline.style.display = "block";
 
     const editorPanel = document.getElementById("subtitleEditorPanel");
     const editorList = document.getElementById("subtitleEditorList");
@@ -1295,9 +1513,9 @@ document.getElementById("subtitleEditorOk").onclick=()=>{
 
     document.getElementById("subtitleEditorPanel").style.display = "none";
 
-    capsuleTimeline.style.display = "block";
-
     renderCapsules();
+
+    capsuleTimeline.style.display = "none";
 
     status.textContent="تم حفظ تعديلات الترجمة";
 };
@@ -1314,6 +1532,17 @@ return;
 }
 
 const formData=new FormData();
+
+exportProgressPanel.style.display="block";
+exportProgressBar.style.width="10%";
+let progressValue=10;
+const progressTimer=setInterval(()=>{
+    if(progressValue<90){
+        progressValue+=1;
+        exportProgressBar.style.width=progressValue+"%";
+    }
+},500);
+
 formData.append("file",videoFile.files[0]);
 formData.append("srt", srtText);
 
@@ -1338,14 +1567,17 @@ Array.from(document.getElementById("textLayer").children).forEach(el => {
         text: el.textContent,
         left: leftPercent || 50,
         top: topPercent || 50,
-        scale: el.scale || 1.0
+        scale: el.scale || 1.0,
+        color: el.style.color || colorPicker.value
     });
 });
 formData.append("custom_texts", JSON.stringify(customTexts));
-formData.append("subtitle_color", colorPicker.value);
-formData.append("shadow_color", shadowColorPicker.value);
-formData.append("background_color", backgroundColorPicker.value);
-formData.append("background_opacity", backgroundOpacityPicker.value);
+formData.append("subtitle_color", subtitleTextColor);
+formData.append("shadow_color", subtitleShadowColor);
+formData.append("background_color", subtitleBackgroundColor);
+formData.append("background_opacity", subtitleBackgroundOpacity);
+formData.append("custom_background_color", customBackgroundColor);
+formData.append("custom_background_opacity", customBackgroundOpacity);
 formData.append("font", currentFont);
 
 status.textContent="جاري تصدير الفيديو...";
@@ -1378,9 +1610,18 @@ a.remove();
 setTimeout(()=>URL.revokeObjectURL(url),1000);
 
 status.textContent="تم تصدير الفيديو بنجاح";
+clearInterval(progressTimer);
+exportProgressBar.style.width="100%";
+setTimeout(()=>{
+    exportProgressPanel.style.display="none";
+    exportProgressBar.style.width="0%";
+},500);
 }catch(e){
 console.error(e);
 status.textContent=e.message||"فشل تصدير الفيديو";
+clearInterval(progressTimer);
+exportProgressPanel.style.display="none";
+exportProgressBar.style.width="0%";
 }finally{
 exportBtn.disabled=false;
 }
@@ -1492,7 +1733,7 @@ if(!dragging)return;
 const t=e.touches[0];
 const p=video.parentElement.getBoundingClientRect();
 
-overlay.style.transform="translate(-50%,-50%)";
+overlay.style.transform=`translate(-50%,-50%) scale(${scale})`;
 overlay.style.left=(startLeft+(t.clientX-startX)/p.width*100)+"%";
 overlay.style.top=(startTop+(t.clientY-startY)/p.height*100)+"%";
 
@@ -1532,7 +1773,15 @@ overlay.lastDistance=null;
 
 const shadowColorPicker = document.getElementById("shadowColorPicker");
 shadowColorPicker.oninput = () => {
-    overlay.style.textShadow = `2px 2px 4px ${shadowColorPicker.value}`;
+    if (colorTarget === "subtitle") {
+        subtitleShadowColor = shadowColorPicker.value;
+        subtitleOverlay.style.textShadow = `2px 2px 4px ${subtitleShadowColor}`;
+    } else if (colorTarget === "custom") {
+        customShadowColor = shadowColorPicker.value;
+        document.querySelectorAll("#textLayer > div").forEach(el => {
+            el.style.textShadow = `2px 2px 4px ${customShadowColor}`;
+        });
+    }
 };
 
 </script>

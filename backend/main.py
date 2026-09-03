@@ -88,38 +88,172 @@ def load_uthmani_ayahs():
         return []
 
 def find_uthmani_text(text):
-    normalized = normalize_quran_text(text)
+    # تطبيق القواعد الخاصة قبل التطبيع العام
+    special_normalizations = {
+        "والليل": "واليل",
+        "واليل": "واليل",
+        "آية": "ءاية",
+        "اية": "ءاية",
+        "آيات": "ءايات",
+        "ايات": "ءايات",
+    }
 
-    if not normalized:
+    raw_words = text.split()
+
+    raw_words = [
+        special_normalizations.get(word, word)
+        for word in raw_words
+    ]
+
+    normalized_words = [
+        normalize_quran_text(word)
+        for word in raw_words
+    ]
+
+    target_words = [
+        word
+        for word in normalized_words
+        if word
+    ]
+
+    if not target_words:
         return text
+
+    normalized = " ".join(target_words)
 
     ayahs = load_uthmani_ayahs()
 
+    # ---------------------------------------------------------
+    # 1. المطابقة الكاملة
+    # ---------------------------------------------------------
     for ayah in ayahs:
-        ayah_normalized = normalize_quran_text(ayah)
+        ayah_words = [
+            normalize_quran_text(word)
+            for word in ayah.split()
+        ]
 
-        # تطابق الآية كاملة
+        ayah_words = [
+            word
+            for word in ayah_words
+            if word
+        ]
+
+        ayah_normalized = " ".join(ayah_words)
+
         if ayah_normalized == normalized:
             return ayah
 
-        # البحث عن جزء متصل من الآية
-        if normalized in ayah_normalized:
-            words = ayah.split()
-            normalized_words = [normalize_quran_text(w) for w in words]
+    # ---------------------------------------------------------
+    # 2. البحث عن جزء متصل من الآية
+    # ---------------------------------------------------------
+    # لا نستخدم هذه الطريقة مع كلمة واحدة،
+    # حتى لا تتحول كلمة قصيرة إلى كلمة أخرى من القرآن.
+    if len(target_words) >= 2:
 
-            target_words = normalized.split()
+        for ayah in ayahs:
+            words_original = ayah.split()
+
+            normalized_words = [
+                normalize_quran_text(word)
+                for word in words_original
+            ]
 
             filtered_words = []
             filtered_normalized = []
 
-            for w, nw in zip(words, normalized_words):
-                if nw:
-                    filtered_words.append(w)
-                    filtered_normalized.append(nw)
+            for word, normalized_word in zip(
+                words_original,
+                normalized_words
+            ):
+                if normalized_word:
+                    filtered_words.append(word)
+                    filtered_normalized.append(normalized_word)
 
-            for i in range(len(filtered_normalized) - len(target_words) + 1):
-                if filtered_normalized[i:i + len(target_words)] == target_words:
-                    return " ".join(filtered_words[i:i + len(target_words)])
+            for i in range(
+                len(filtered_normalized) - len(target_words) + 1
+            ):
+                candidate = filtered_normalized[
+                    i:i + len(target_words)
+                ]
+
+                if candidate == target_words:
+                    return " ".join(
+                        filtered_words[
+                            i:i + len(target_words)
+                        ]
+                    )
+
+    # ---------------------------------------------------------
+    # 3. مطابقة تقريبية آمنة للكلمات
+    # ---------------------------------------------------------
+    if len(target_words) >= 2:
+
+        from difflib import SequenceMatcher
+
+        def similarity(a, b):
+            return SequenceMatcher(None, a, b).ratio()
+
+        best_match = None
+        best_score = 0.0
+
+        for ayah in ayahs:
+            words_original = ayah.split()
+
+            normalized_words = [
+                normalize_quran_text(word)
+                for word in words_original
+            ]
+
+            filtered_words = []
+            filtered_normalized = []
+
+            for word, normalized_word in zip(
+                words_original,
+                normalized_words
+            ):
+                if normalized_word:
+                    filtered_words.append(word)
+                    filtered_normalized.append(normalized_word)
+
+            if len(filtered_normalized) < len(target_words):
+                continue
+
+            target_len = len(target_words)
+
+            for i in range(
+                len(filtered_normalized) - target_len + 1
+            ):
+                candidate_words = filtered_normalized[
+                    i:i + target_len
+                ]
+
+                scores = [
+                    similarity(target, candidate)
+                    for target, candidate in zip(
+                        target_words,
+                        candidate_words
+                    )
+                ]
+
+                average_score = sum(scores) / len(scores)
+                min_score = min(scores)
+
+                if (
+                    average_score >= 0.88
+                    and min_score >= 0.82
+                ):
+                    if average_score > best_score:
+                        best_score = average_score
+
+                        best_match = " ".join(
+                            filtered_words[
+                                i:i + target_len
+                            ]
+                        )
+
+        if best_match is not None:
+            return best_match
+
     return text
 
 def find_best_pause_split(json_path: Path, word_count: int):
@@ -402,6 +536,8 @@ def render_arabic_text(
     font_size: int = 50,
     background_color: str = "#d4af37",
     background_opacity: int = 43,
+    text_color: str = "#FFFFFF",
+    shadow_color: str = "#000000",
 ):
     lines = [line.strip() for line in text.split("\n") if line.strip()]
 
@@ -420,7 +556,7 @@ def render_arabic_text(
                 str(ARABIC_FONT_BOLD),
                 lines[0],
                 "--background=none",
-                "--foreground=ffffff",
+                f"--foreground={text_color.lstrip('#')}",
                 f"--font-size={font_size}",
                 "-o",
                 str(output_path),
@@ -443,7 +579,10 @@ def render_arabic_text(
             ImageFilter.MaxFilter(5)
         )
 
-        outline.putalpha(outline_alpha)
+        shadow_hex = shadow_color.lstrip("#")
+        shadow_rgb = tuple(int(shadow_hex[i:i+2], 16) for i in (0, 2, 4))
+        outline_color = Image.new("RGBA", img.size, (*shadow_rgb, 255))
+        outline_color.putalpha(outline_alpha)
 
         background = Image.new(
             "RGBA",
@@ -454,11 +593,11 @@ def render_arabic_text(
         background_draw = ImageDraw.Draw(background)
         background_draw.rounded_rectangle(
             [0, 0, img.size[0] - 1, img.size[1] - 1],
-            radius=16,
+            radius=32,
             fill=bg_fill,
         )
 
-        background.alpha_composite(outline)
+        background.alpha_composite(outline_color)
         background.alpha_composite(img)
         background.save(output_path)
 
@@ -477,7 +616,7 @@ def render_arabic_text(
                     str(ARABIC_FONT_BOLD),
                     line,
                     "--background=none",
-                    "--foreground=ffffff",
+                    f"--foreground={text_color.lstrip('#')}",
                     f"--font-size={font_size}",
                     "-o",
                     str(temp_path),
@@ -506,7 +645,10 @@ def render_arabic_text(
                 ImageFilter.MaxFilter(5)
             )
 
-            outline.putalpha(outline_alpha)
+            shadow_hex = shadow_color.lstrip("#")
+            shadow_rgb = tuple(int(shadow_hex[i:i+2], 16) for i in (0, 2, 4))
+            outline_color = Image.new("RGBA", img.size, (*shadow_rgb, 255))
+            outline_color.putalpha(outline_alpha)
 
             outlined_img = Image.new(
                 "RGBA",
@@ -514,7 +656,7 @@ def render_arabic_text(
                 (0, 0, 0, 0),
             )
 
-            outlined_img.alpha_composite(outline)
+            outlined_img.alpha_composite(outline_color)
             outlined_img.alpha_composite(img)
 
             line_images.append((outlined_img.copy(), temp_path))
@@ -543,7 +685,7 @@ def render_arabic_text(
         canvas_draw = ImageDraw.Draw(canvas)
         canvas_draw.rounded_rectangle(
             [0, 0, frame_width - 1, frame_height - 1],
-            radius=16,
+            radius=32,
             fill=bg_fill,
         )
 
@@ -682,11 +824,14 @@ async def export(
     subtitle_color: str = Form("#FFFFFF"),
     background_color: str = Form("#d4af37"),
     background_opacity: int = Form(43),
+    custom_background_color: str = Form("#ffffff"),
+    custom_background_opacity: int = Form(43),
     shadow_color: str = Form("#000000"),
     custom_texts: str = Form("[]"),
 ):
     print("EXPORT FUNCTION STARTED")
     print("EXPORT FONT:", font)
+    print("EXPORT COLORS:", subtitle_color, custom_texts)
     try:
         video_id = str(uuid.uuid4())
         UPLOADS.mkdir(exist_ok=True, parents=True)
@@ -723,7 +868,11 @@ async def export(
 
         primary_color = hex_to_ass_color(subtitle_color)
         shadow_ass_color = hex_to_ass_color(shadow_color)
-        style_line = f"Style: Default,{'Scheherazade New' if font == 'Scheherazade' else 'sans-serif'},{font_size},{primary_color},&H000000FF,&H00000000,{shadow_ass_color},0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1"
+        background_ass_color = hex_to_ass_color(background_color)
+        background_alpha = f"{255 - int((background_opacity / 100) * 255):02X}"
+        background_ass_color = "&H" + background_alpha + background_ass_color[4:]
+        print("EXPORT BACKGROUND:", background_color, background_opacity, background_ass_color)
+        style_line = f"Style: Default,{'Scheherazade New' if font == 'Scheherazade' else 'sans-serif'},{font_size},{primary_color},&H000000FF,{background_ass_color},{background_ass_color},0,0,0,0,100,100,0,0,1,6,2,2,10,10,10,1"
 
         ass_content = f"""[Script Info]
 ScriptType: v4.00+
@@ -773,9 +922,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     text = " \\N ".join(text_lines)
                     if font == "Scheherazade":
                         hb_text = find_uthmani_text(" ".join(text_lines))
-                        hb_text = wrap_arabic_text(hb_text, font_size, 620)
+                        hb_text = wrap_arabic_text(hb_text, font_size, int(620 * font_size / 55))
                         image_path = harfbuzz_dir / f"subtitle_{len(harfbuzz_images)}.png"
-                        render_arabic_text(hb_text, image_path, font_size, background_color, background_opacity)
+                        render_arabic_text(hb_text, image_path, font_size, background_color, background_opacity, subtitle_color, shadow_color)
                         start_parts = start.split(":")
                         end_parts = end.split(":")
                         hb_start = int(start_parts[0]) * 3600 + int(start_parts[1]) * 60 + float(start_parts[2])
@@ -801,8 +950,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     safe_text = item["text"].replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
                     x_val = f"(main_w * {item['left']}/100) - (text_w/2)"
                     y_val = f"(main_h * {item['top']}/100)"
-                    fs = int(40 * item['scale'])
-                    custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor=white:shadowx=2:shadowy=2"
+                    fs = int(80 * item['scale'])
+                    custom_color = item.get("color", subtitle_color)
+                    if custom_color.startswith("rgb"):
+                        rgb = re.findall(r"\d+", custom_color)
+                        if len(rgb) >= 3:
+                            custom_color = "#{:02x}{:02x}{:02x}".format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+                    custom_shadow = shadow_color
+                    bg_alpha = int((background_opacity / 100) * 255)
+                    custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor={custom_color}:shadowcolor={custom_shadow}:shadowx=2:shadowy=2:box=1:boxcolor={custom_background_color}@{custom_background_opacity/100}:boxborderw=10"
         except Exception:
             pass
         if font == "Scheherazade" and harfbuzz_images:
@@ -878,7 +1034,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             content={"message": "FFmpeg error"}
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
-            content={"message": "Internal error"}
+            content={"message": "Internal error", "error": str(e)}
         )
