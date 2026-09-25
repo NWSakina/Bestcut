@@ -958,7 +958,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             custom_color = "#{:02x}{:02x}{:02x}".format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
                     custom_shadow = shadow_color
                     bg_alpha = int((background_opacity / 100) * 255)
-                    custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor={custom_color}:shadowcolor={custom_shadow}:shadowx=2:shadowy=2:box=1:boxcolor={custom_background_color}@{custom_background_opacity/100}:boxborderw=10"
+                    custom_filters += f",drawtext=text='{safe_text}':x={x_val}:y={y_val}:fontsize={fs}:fontcolor={custom_color}:shadowcolor={custom_shadow}:shadowx=2:shadowy=2:box=1:boxcolor={custom_background_color}@{custom_background_opacity/100}:boxborderw=10:enable='between(t,{item.get('start', 0)},{item.get('start', 0) + item.get('duration', 3)})'"
         except Exception:
             pass
         if font == "Scheherazade" and harfbuzz_images:
