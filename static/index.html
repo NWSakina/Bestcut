@@ -1574,6 +1574,10 @@ formData.append("font", currentFont);
 // جمع بيانات النصوص اليدوية
 const customTexts = [];
 Array.from(document.getElementById("textLayer").children).forEach(el => {
+    const wasHidden = el.style.display === "none";
+    if (wasHidden) {
+        el.style.display = "block";
+    }
     // حساب الموقع بالنسبة المئوية لضمان الدقة
     const parent = document.getElementById("textLayer").getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
@@ -1583,6 +1587,10 @@ Array.from(document.getElementById("textLayer").children).forEach(el => {
 
     const topPercent =
         ((elRect.top + (elRect.height / 2) - parent.top) / parent.height) * 100;
+
+    if (wasHidden) {
+        el.style.display = "none";
+    }
 
     customTexts.push({
         text: el.textContent,
