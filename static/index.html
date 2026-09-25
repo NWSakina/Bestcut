@@ -1145,6 +1145,23 @@ addTextBtn.onclick=()=>{
     copy.style.left="50%";
     copy.style.transform="translateX(-50%)";
     copy.textContent="";
+      // توقيت العنوان اليدوي
+      const startInput = prompt(
+          "وقت بداية ظهور العنوان بالثواني:",
+          "0"
+      );
+
+      const durationInput = prompt(
+          "مدة ظهور العنوان بالثواني:",
+          "3"
+      );
+
+      const titleStart = Math.max(0, parseFloat(startInput) || 0);
+      const titleDuration = Math.max(0.5, parseFloat(durationInput) || 3);
+
+      copy.titleStart = titleStart;
+      copy.titleDuration = titleDuration;
+      copy.titleEnd = titleStart + titleDuration;
 
     const offsetCount = textLayer.children.length;
     copy.style.position = "absolute";
@@ -1560,17 +1577,24 @@ Array.from(document.getElementById("textLayer").children).forEach(el => {
     // حساب الموقع بالنسبة المئوية لضمان الدقة
     const parent = document.getElementById("textLayer").getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
-    const leftPercent = ((elRect.left + (elRect.width / 2) - parent.left) / parent.width) * 100;
-    const topPercent = ((elRect.top + (elRect.height / 2) - parent.top) / parent.height) * 100;
-    
+
+    const leftPercent =
+        ((elRect.left + (elRect.width / 2) - parent.left) / parent.width) * 100;
+
+    const topPercent =
+        ((elRect.top + (elRect.height / 2) - parent.top) / parent.height) * 100;
+
     customTexts.push({
         text: el.textContent,
         left: leftPercent || 50,
         top: topPercent || 50,
         scale: el.scale || 1.0,
-        color: el.style.color || colorPicker.value
+        color: el.style.color || colorPicker.value,
+        start: Math.max(0, Number(el.titleStart) || 0),
+        duration: Math.max(0.5, Number(el.titleDuration) || 3)
     });
 });
+
 formData.append("custom_texts", JSON.stringify(customTexts));
 formData.append("subtitle_color", subtitleTextColor);
 formData.append("shadow_color", subtitleShadowColor);
@@ -1672,27 +1696,36 @@ result.value=data.text;
 }
 
 if(data.subtitles){
+    video.ontimeupdate=()=>{
+        const t=video.currentTime;
 
-video.ontimeupdate=()=>{
+        // توقيت الترجمة — كما هو
+        const current=subtitles.find(s=>{
+            const a=s.start.replace(",",".").split(":");
+            const b=s.end.replace(",",".").split(":");
 
-const t=video.currentTime;
-const current=subtitles.find(s=>{
+            const start=(+a[0])*3600+(+a[1])*60+parseFloat(a[2]);
+            const end=(+b[0])*3600+(+b[1])*60+parseFloat(b[2]);
 
+            return t>=start && t<end;
+        });
 
-const a=s.start.replace(",",".").split(":");
-const b=s.end.replace(",",".").split(":");
+        overlay.textContent = current ? current.text.replace(/^\s*\[?\d+\]?\s*/, "") : "";
+        currentSubtitleIndex = current ? subtitles.indexOf(current) : -1;
 
-const start=(+a[0])*3600+(+a[1])*60+parseFloat(a[2]);
-const end=(+b[0])*3600+(+b[1])*60+parseFloat(b[2]);
+        // توقيت العناوين اليدوية — كل عنوان مستقل
+        Array.from(document.getElementById("textLayer").children).forEach(el=>{
+            if(el.titleStart === undefined){
+                return;
+            }
 
-return t>=start && t<end;
+            const start = Number(el.titleStart) || 0;
+            const duration = Math.max(0.5, Number(el.titleDuration) || 3);
+            const end = start + duration;
 
-});
-
-overlay.textContent = current ? current.text.replace(/^\s*\[?\d+\]?\s*/, "") : "";
-currentSubtitleIndex = current ? subtitles.indexOf(current) : -1;
-};
-
+            el.style.display = (t >= start && t < end) ? "block" : "none";
+        });
+    };
 }
 
 }catch(e){
