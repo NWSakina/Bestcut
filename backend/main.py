@@ -950,7 +950,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     safe_text = item["text"].replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
                     x_val = f"(main_w * {item['left']}/100) - (text_w/2)"
                     y_val = f"(main_h * {item['top']}/100)"
-                    fs = int(80 * item['scale'])
+                    fs = int(70 * item['scale'])
                     custom_color = item.get("color", subtitle_color)
                     if custom_color.startswith("rgb"):
                         rgb = re.findall(r"\d+", custom_color)
