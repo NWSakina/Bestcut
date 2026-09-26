@@ -953,7 +953,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     title_text_file = title_text_path.resolve().as_posix()
                     custom_color = item.get("color", subtitle_color)
                     x_val = f"(main_w * {item['left']}/100) - (text_w/2)"
-                    y_val = f"(main_h * {item['top']}/100)"
+                    y_val = f"(main_h * {item['top']}/100) - (text_h/2)"
                     if custom_color.startswith("rgb"):
                         rgb = re.findall(r"\d+", custom_color)
                         if len(rgb) >= 3:
