@@ -970,7 +970,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 hb_inputs.extend(["-loop", "1", "-i", str(item["path"].resolve().as_posix())])
 
                 x_expr = f"(main_w * {subtitle_left}/100) - (overlay_w/2)"
-                y_expr = f"(main_h * {subtitle_top}/100) - overlay_h"
+                y_expr = f"(main_h * {subtitle_top}/100) - (overlay_h/2)"
 
                 output_label = f"[hb{idx}]"
                 hb_filters.append(
