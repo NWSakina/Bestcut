@@ -104,7 +104,7 @@ background:#000;
 
 #subtitleOverlay{
 position:absolute;
-top:30%;
+top:40%;
 left:50%;
 transform:translate(-50%,-50%);
 display:block;
@@ -1564,7 +1564,7 @@ formData.append("file",videoFile.files[0]);
 formData.append("srt", srtText);
 
 const leftVal = parseFloat(overlay.style.left) || 50;
-const topVal = parseFloat(overlay.style.top) || 22;
+const topVal = parseFloat(overlay.style.top) || 40;
 const scaleVal = (typeof scale !== "undefined" && scale) ? scale : 1.0;
 
 formData.append("subtitle_left", leftVal);
