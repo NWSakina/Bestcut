@@ -857,7 +857,7 @@ async def export(
         # حساب الإحداثيات وحجم الخط بناءً على المدخلات
         pos_x = int((subtitle_left / 100.0) * vid_width)
         pos_y = int((subtitle_top / 100.0) * vid_height)
-        font_size = int(55 * subtitle_scale)
+        font_size = int(40 * subtitle_scale)
 
         def hex_to_ass_color(hex_str):
             hex_str = hex_str.lstrip('#')
