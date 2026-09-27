@@ -706,6 +706,140 @@ def render_arabic_text(
             if temp_path.exists():
                 temp_path.unlink()
 
+
+def correct_quran_segment(text):
+    words = text.split()
+    if len(words) < 4:
+        return text
+
+    from difflib import SequenceMatcher
+
+    normalized_input = [
+        normalize_quran_text(word)
+        for word in words
+    ]
+
+    ayahs = load_uthmani_ayahs()
+    candidates = []
+
+    # Use a strong exact anchor first.
+    for anchor_len in (6, 5, 4):
+        if len(words) < anchor_len:
+            continue
+
+        for anchor_start in range(len(words) - anchor_len + 1):
+            anchor = normalized_input[
+                anchor_start:anchor_start + anchor_len
+            ]
+
+            if not all(anchor):
+                continue
+
+            for ayah in ayahs:
+                original_words = ayah.split()
+                normalized_words = [
+                    normalize_quran_text(word)
+                    for word in original_words
+                ]
+
+                for i in range(
+                    len(normalized_words) - anchor_len + 1
+                ):
+                    if normalized_words[i:i + anchor_len] != anchor:
+                        continue
+
+                    end = i + len(words)
+
+                    if end <= len(original_words):
+                        candidates.append(
+                            original_words[i:end]
+                        )
+
+                    break
+
+            if candidates:
+                break
+
+        if candidates:
+            break
+
+    if not candidates:
+        return text
+
+    # Remove duplicate candidate windows.
+    unique_candidates = []
+    seen = set()
+
+    for candidate in candidates:
+        key = tuple(
+            normalize_quran_text(word)
+            for word in candidate
+        )
+
+        if key not in seen:
+            seen.add(key)
+            unique_candidates.append(candidate)
+
+    # Correct only positions on which all candidate verses agree.
+    corrected = list(words)
+
+    for i in range(len(words)):
+        candidate_words = [
+            candidate[i]
+            for candidate in unique_candidates
+            if i < len(candidate)
+        ]
+
+        if not candidate_words:
+            continue
+
+        normalized_candidates = [
+            normalize_quran_text(word)
+            for word in candidate_words
+        ]
+
+        if len(set(normalized_candidates)) != 1:
+            continue
+
+        score = SequenceMatcher(
+            None,
+            normalized_input[i],
+            normalized_candidates[0]
+        ).ratio()
+
+        # Always preserve already matching words.
+        if normalized_input[i] == normalized_candidates[0]:
+            corrected[i] = candidate_words[0]
+            continue
+
+        # Only repair a clearly aligned word.
+        if score >= 0.40:
+            corrected[i] = candidate_words[0]
+
+    return " ".join(corrected)
+
+
+@app.post("/correct_quran")
+async def correct_quran(payload: dict):
+    subtitles = payload.get("subtitles") or []
+
+    corrected_subtitles = []
+
+    for item in subtitles:
+        corrected = dict(item)
+        corrected["text"] = correct_quran_segment(
+            item.get("text", "")
+        )
+        corrected_subtitles.append(corrected)
+
+    return JSONResponse(
+        {
+            "success": True,
+            "subtitles": corrected_subtitles,
+        }
+    )
+
+
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     ext = Path(file.filename).suffix
