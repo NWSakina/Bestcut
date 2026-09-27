@@ -946,7 +946,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         try:
             texts_data = json.loads(custom_texts) if custom_texts else []
             for item in texts_data:
-                    fs = int(70 * item['scale'])
+                    fs = int(52 * item['scale'])
                     wrapped_text = wrap_arabic_text(item["text"], fs, 600)
                     title_text_path = harfbuzz_dir / f"title_{len(list(harfbuzz_dir.glob('title_*.txt')))}.txt"
                     title_text_path.write_text(wrapped_text, encoding="utf-8")
@@ -960,7 +960,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             custom_color = "#{:02x}{:02x}{:02x}".format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
                     custom_shadow = shadow_color
                     bg_alpha = int((background_opacity / 100) * 255)
-                    custom_filters += f",drawtext=textfile='{title_text_file}':x=(main_w-620)/2:y={y_val}:fontsize={fs}:text_align=center:boxw=620:fontcolor={custom_color}:shadowcolor={custom_shadow}:shadowx=2:shadowy=2:box=1:boxcolor={custom_background_color}@{custom_background_opacity/100}:boxborderw=10:enable='between(t,{item.get('start', 0)},{item.get('start', 0) + item.get('duration', 3)})'"
+                    custom_filters += f",drawtext=textfile='{title_text_file}':x=(main_w-text_w)/2:y={y_val}:fontsize={fs}:text_align=center:fontcolor={custom_color}:shadowcolor={custom_shadow}:shadowx=2:shadowy=2:box=1:boxcolor={custom_background_color}@{custom_background_opacity/100}:boxborderw=10:enable='between(t,{item.get('start', 0)},{item.get('start', 0) + item.get('duration', 3)})'"
         except Exception:
             pass
         if font == "Scheherazade" and harfbuzz_images:
