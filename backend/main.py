@@ -59,7 +59,6 @@ def normalize_quran_text(s):
     s = s.replace("ؤو", "و")
     s = s.replace("ى", "ي")
     s = s.replace("ـ", "")
-    s = s.replace("ا", "")
     s = re.sub(r'\s+', ' ', s).strip()
     return s
 
@@ -256,9 +255,9 @@ def find_uthmani_text(text):
 
     return text
 
-def find_best_pause_split(json_path: Path, word_count: int):
+def load_whisper_word_timings(json_path: Path):
     if not json_path.exists():
-        return None
+        return []
 
     try:
         data = json.loads(
@@ -267,111 +266,189 @@ def find_best_pause_split(json_path: Path, word_count: int):
 
         transcription = data.get("transcription", [])
         if not transcription:
-            return None
+            return []
 
-        tokens = transcription[0].get("tokens", [])
         word_timings = []
 
-        current_text = ""
-        current_start = None
-        current_end = None
+        for segment in transcription:
+            tokens = segment.get("tokens", [])
 
-        for token in tokens:
-            token_text = token.get("text", "")
-            if not token_text:
-                continue
+            current_text = ""
+            current_start = None
+            current_end = None
 
-            clean_token = token_text.strip()
-            if not clean_token:
-                continue
+            for token in tokens:
+                token_text = token.get("text", "")
+                if not token_text:
+                    continue
 
-            if re.fullmatch(r"[\[\]\d]+", clean_token):
-                continue
+                clean_token = token_text.strip()
+                if not clean_token:
+                    continue
 
-            token_start = token.get("offsets", {}).get("from")
-            token_end = token.get("offsets", {}).get("to")
+                # تجاهل علامات Whisper الخاصة مثل:
+                # [_BEG_] و [_TT_950]
+                if (
+                    clean_token == "[_BEG_]"
+                    or re.fullmatch(r"\[_TT_\d+\]", clean_token)
+                    or re.fullmatch(r"[\[\]\d]+", clean_token)
+                ):
+                    continue
 
-            if token_start is None or token_end is None:
-                continue
+                token_start = token.get("offsets", {}).get("from")
+                token_end = token.get("offsets", {}).get("to")
 
-            starts_new_word = token_text[0].isspace()
+                if token_start is None or token_end is None:
+                    continue
 
-            if starts_new_word and current_text:
+                starts_new_word = token_text[0].isspace()
+
+                if starts_new_word and current_text:
+                    word_timings.append({
+                        "text": current_text.strip(),
+                        "start": current_start,
+                        "end": current_end,
+                    })
+
+                    current_text = clean_token
+                    current_start = token_start
+                    current_end = token_end
+
+                else:
+                    if not current_text:
+                        current_text = clean_token
+                        current_start = token_start
+                    else:
+                        current_text += clean_token
+
+                    current_end = token_end
+
+            if current_text:
                 word_timings.append({
                     "text": current_text.strip(),
                     "start": current_start,
                     "end": current_end,
                 })
 
-                current_text = clean_token
-                current_start = token_start
-                current_end = token_end
+        return word_timings
 
-            else:
-                if not current_text:
-                    current_text = clean_token
-                    current_start = token_start
-                else:
-                    current_text += clean_token
+    except Exception as e:
+        print("WHISPER WORD TIMINGS ERROR:", e)
+        return []
 
-                current_end = token_end
+def find_best_pause_split(word_timings, word_count: int):
+    """
+    تقسيم قرآني:
+    1) حدود الآيات لها الأولوية.
+    2) الوقفات الصوتية تستخدم فقط عند عدم وجود حد آية.
+    """
+    if not word_timings:
+        return None
 
-        if current_text:
-            word_timings.append({
-                "text": current_text.strip(),
-                "start": current_start,
-                "end": current_end,
-            })
+    if len(word_timings) < word_count:
+        return None
 
-        if len(word_timings) < word_count:
-            return None
+    word_timings = word_timings[:word_count]
 
-        word_timings = word_timings[:word_count]
+    # ---------------------------------------------------------
+    # أولاً: البحث عن حدود الآيات.
+    # ---------------------------------------------------------
+    ayah_boundaries = []
 
-        # ---------------------------------------------------------
-        # البحث عن الوقفات القصيرة الطبيعية بين الكلمات.
-        # لا نعتمد على كلمة معينة مثل "إن".
-        # ---------------------------------------------------------
+    for i in range(1, word_count):
+        previous = word_timings[i - 1]
+        current = word_timings[i]
 
-        candidates = []
+        previous_ayah = previous.get("ayah")
+        current_ayah = current.get("ayah")
 
-        min_words = 4
-        max_gap = 350
+        if (
+            previous_ayah is None
+            or current_ayah is None
+            or previous_ayah == current_ayah
+        ):
+            continue
 
-        for i in range(min_words, word_count - min_words + 1):
-            previous_word = word_timings[i - 1]
-            next_word = word_timings[i]
+        previous_end = previous.get("end")
+        current_start = current.get("start")
 
-            gap = next_word["start"] - previous_word["end"]
+        if previous_end is None or current_start is None:
+            continue
 
-            if 10 <= gap <= max_gap:
-                balance_distance = abs(i - (word_count / 2))
+        gap = current_start - previous_end
 
-                # الوقفة الأطول أفضل،
-                # لكن نُبقي التوازن بين الجزأين عاملًا مهمًا.
-                score = (balance_distance * 100) - gap
+        # كل انتقال آية صالح للتقسيم،
+        # ونفضل الحد الأقرب إلى منتصف المجموعة.
+        balance_distance = abs(i - (word_count / 2))
 
-                candidates.append({
-                    "index": i,
-                    "gap": gap,
-                    "score": score,
-                    "time": next_word["start"],
-                })
+        ayah_boundaries.append({
+            "index": i,
+            "gap": gap,
+            "balance_distance": balance_distance,
+            "time": current_start,
+        })
 
-        if not candidates:
-            return None
-
+    if ayah_boundaries:
+        # الأولوية لحد الآية، ثم الأقرب إلى منتصف النص،
+        # ثم الفجوة الصوتية الأكبر.
         best = min(
-            candidates,
-            key=lambda x: x["score"]
+            ayah_boundaries,
+            key=lambda x: (
+                x["balance_distance"],
+                -x["gap"],
+            )
         )
 
         return best["index"], best["time"]
 
-    except Exception as e:
-        print("PAUSE SPLIT ERROR:", e)
+    # ---------------------------------------------------------
+    # ثانياً: لا يوجد حد آية، فنستخدم الوقفة الصوتية.
+    # ---------------------------------------------------------
+    candidates = []
+
+    min_words = 4
+    max_gap = 350
+
+    for i in range(
+        min_words,
+        word_count - min_words + 1
+    ):
+        previous_word = word_timings[i - 1]
+        next_word = word_timings[i]
+
+        previous_end = previous_word.get("end")
+        next_start = next_word.get("start")
+
+        if previous_end is None or next_start is None:
+            continue
+
+        gap = next_start - previous_end
+
+        if 10 <= gap <= max_gap:
+            balance_distance = abs(
+                i - (word_count / 2)
+            )
+
+            score = (
+                balance_distance * 100
+            ) - gap
+
+            candidates.append({
+                "index": i,
+                "gap": gap,
+                "score": score,
+                "time": next_start,
+            })
+
+    if not candidates:
         return None
 
+    best = min(
+        candidates,
+        key=lambda x: x["score"]
+    )
+
+    return best["index"], best["time"]
 
 def parse_srt(path: Path):
     subtitles = []
@@ -384,7 +461,17 @@ def parse_srt(path: Path):
     # ملف JSON الذي أنشأه Whisper بجانب ملف SRT
     json_path = path.with_suffix(".json")
 
+    # توقيتات كلمات Whisper الأصلية
+    word_timings = load_whisper_word_timings(json_path)
+    word_cursor = 0
+
+    # كل كتلة SRT أصلية تحصل على group_id واحد.
+    # إذا انقسمت إلى مقطعين، يبقى المقطعان ضمن نفس المجموعة.
+    group_id = 0
+
     for block in text.strip().split("\n\n"):
+        group_id += 1
+
         lines = block.splitlines()
 
         if len(lines) < 3:
@@ -401,7 +488,11 @@ def parse_srt(path: Path):
             continue
 
         # إزالة رقم المقطع الذي يضعه Whisper مثل: [2] أو 2]
-        subtitle = re.sub(r"^\s*\[?\d+\]?\s*", "", subtitle)
+        subtitle = re.sub(
+            r"^\s*\[?\d+\]?\s*",
+            "",
+            subtitle
+        )
 
         if not subtitle:
             continue
@@ -411,77 +502,186 @@ def parse_srt(path: Path):
 
         words = subtitle.split()
 
+        # ربط كلمات هذا المقطع بتوقيتات Whisper الأصلية.
+        segment_words = word_timings[
+            word_cursor:word_cursor + len(words)
+        ]
+
+        word_cursor += len(words)
+
         # المقاطع القصيرة: نحافظ عليها كما هي.
         if len(words) <= 7:
             subtitles.append({
                 "start": ms_to_time(start_ms),
                 "end": ms_to_time(end_ms),
                 "text": subtitle,
+                "words": segment_words,
+                "group_id": group_id,
             })
             continue
 
         # المقاطع الطويلة:
-        # نبحث أولًا عن وقفة صوتية طبيعية مناسبة للقطع.
-        pause_split = find_best_pause_split(
-            json_path,
-            len(words)
-        )
+        # نقسمها تكراريًا حتى تصبح كل قطعة <= 7 كلمات.
+        # حدود الآيات لها الأولوية، والوقفة الصوتية احتياط.
 
-        if pause_split:
-            split_at, middle_ms = pause_split
+        def split_long_segment(
+            local_words,
+            local_timings,
+            local_start,
+            local_end,
+        ):
+            # ---------------------------------------------------------
+            # لا ننهي المقطع لمجرد أنه <= 7 كلمات.
+            # إذا كان يحتوي أكثر من آية، يجب أولاً الفصل عند حد الآية.
+            # ---------------------------------------------------------
+            unique_ayahs = [
+                w.get("ayah")
+                for w in local_timings
+                if w.get("ayah") is not None
+            ]
+            unique_ayahs = list(dict.fromkeys(unique_ayahs))
 
-            # حماية من أي نتيجة غير منطقية.
-            if split_at < 1 or split_at >= len(words):
-                pause_split = None
+            if len(local_words) <= 7 and len(unique_ayahs) <= 1:
+                subtitles.append({
+                    "start": ms_to_time(local_start),
+                    "end": ms_to_time(local_end),
+                    "text": " ".join(local_words),
+                    "words": local_timings,
+                    "group_id": group_id,
+                })
+                return
 
-        if pause_split:
-            first_text = " ".join(words[:split_at])
-            second_text = " ".join(words[split_at:])
+            # ---------------------------------------------------------
+            # أولاً: إذا كان المقطع يحتوي أكثر من آية،
+            # يجب أن يكون التقسيم عند حد آية.
+            # ---------------------------------------------------------
+            ayah_boundaries = []
 
-            # الحفاظ على حدود المقطع الأصلي.
-            middle_ms = max(start_ms, min(middle_ms, end_ms))
+            for i in range(1, len(local_words)):
+                previous_ayah = local_timings[i - 1].get("ayah")
+                current_ayah = local_timings[i].get("ayah")
 
-            subtitles.append({
-                "start": ms_to_time(start_ms),
-                "end": ms_to_time(middle_ms),
-                "text": first_text,
-            })
+                if (
+                    previous_ayah is not None
+                    and current_ayah is not None
+                    and previous_ayah != current_ayah
+                ):
+                    ayah_boundaries.append(i)
 
-            subtitles.append({
-                "start": ms_to_time(middle_ms),
-                "end": ms_to_time(end_ms),
-                "text": second_text,
-            })
+            if ayah_boundaries:
+                # نفضّل الحد الأقرب إلى 7 كلمات حتى لا نصنع
+                # جزءًا صغيرًا جدًا عندما يكون ذلك ممكنًا.
+                split_at = min(
+                    ayah_boundaries,
+                    key=lambda i: abs(i - 7)
+                )
 
-        else:
-            # إذا لم توجد وقفة مناسبة:
-            # نعود إلى التقسيم المتوازن السابق كحل احتياطي.
-            split_at = len(words) // 2
+                middle_ms = local_timings[split_at].get("start")
 
-            first_text = " ".join(words[:split_at])
-            second_text = " ".join(words[split_at:])
+                if middle_ms is None:
+                    middle_ms = local_start + int(
+                        (local_end - local_start)
+                        * split_at
+                        / len(local_words)
+                    )
 
-            total_duration = end_ms - start_ms
+                middle_ms = max(
+                    local_start,
+                    min(middle_ms, local_end)
+                )
 
-            first_duration = int(
-                total_duration * len(words[:split_at]) / len(words)
+                split_long_segment(
+                    local_words[:split_at],
+                    local_timings[:split_at],
+                    local_start,
+                    middle_ms,
+                )
+
+                split_long_segment(
+                    local_words[split_at:],
+                    local_timings[split_at:],
+                    middle_ms,
+                    local_end,
+                )
+                return
+
+            # ---------------------------------------------------------
+            # لا يوجد حد آية: نحن داخل آية واحدة طويلة.
+            # نستخدم الوقفة الصوتية.
+            # ---------------------------------------------------------
+            split_result = find_best_pause_split(
+                local_timings,
+                len(local_words)
             )
 
-            middle_ms = start_ms + first_duration
+            if split_result:
+                split_at, middle_ms = split_result
 
-            subtitles.append({
-                "start": ms_to_time(start_ms),
-                "end": ms_to_time(middle_ms),
-                "text": first_text,
-            })
+                if 1 <= split_at < len(local_words):
+                    middle_ms = max(
+                        local_start,
+                        min(middle_ms, local_end)
+                    )
 
-            subtitles.append({
-                "start": ms_to_time(middle_ms),
-                "end": ms_to_time(end_ms),
-                "text": second_text,
-            })
+                    split_long_segment(
+                        local_words[:split_at],
+                        local_timings[:split_at],
+                        local_start,
+                        middle_ms,
+                    )
+
+                    split_long_segment(
+                        local_words[split_at:],
+                        local_timings[split_at:],
+                        middle_ms,
+                        local_end,
+                    )
+                    return
+
+            # ---------------------------------------------------------
+            # لا توجد وقفة مناسبة: fallback متوازن تكراري.
+            # ---------------------------------------------------------
+            split_at = len(local_words) // 2
+
+            if split_at < 1:
+                split_at = 1
+
+            if split_at >= len(local_words):
+                split_at = len(local_words) - 1
+
+            total_duration = local_end - local_start
+
+            first_duration = int(
+                total_duration
+                * len(local_words[:split_at])
+                / len(local_words)
+            )
+
+            middle_ms = local_start + first_duration
+
+            split_long_segment(
+                local_words[:split_at],
+                local_timings[:split_at],
+                local_start,
+                middle_ms,
+            )
+
+            split_long_segment(
+                local_words[split_at:],
+                local_timings[split_at:],
+                middle_ms,
+                local_end,
+            )
+
+        split_long_segment(
+            words,
+            segment_words,
+            start_ms,
+            end_ms,
+        )
 
     return subtitles
+
 
 def wrap_arabic_text(text: str, font_size: int, max_width: int = 620) -> str:
     words = text.split()
@@ -720,6 +920,69 @@ def correct_quran_segment(text):
     ]
 
     ayahs = load_uthmani_ayahs()
+
+    # أولاً: إذا كان عدد كلمات Whisper مساويًا لعدد كلمات آية
+    # كاملة، نبحث عن الآية كاملة بدل اختيار نافذة من داخلها.
+    # علامات الوقف ليست كلمات زمنية، لذلك نتجاهلها هنا.
+    pause_marks = {"ۖ", "ۗ", "ۚ", "ۛ", "ۙ", "ۜ", "۝"}
+
+    full_ayah_candidates = []
+
+    for ayah in ayahs:
+        quran_words = [
+            word for word in ayah.split()
+            if word not in pause_marks
+        ]
+
+        if len(quran_words) != len(words):
+            continue
+
+        normalized_quran = [
+            normalize_quran_text(word)
+            for word in quran_words
+        ]
+
+        word_scores = [
+            SequenceMatcher(
+                None,
+                normalized_input[i],
+                normalized_quran[i]
+            ).ratio()
+            for i in range(len(words))
+        ]
+
+        average_score = (
+            sum(word_scores) / len(word_scores)
+            if word_scores else 0.0
+        )
+
+        exact_count = sum(
+            normalized_input[i] == normalized_quran[i]
+            for i in range(len(words))
+        )
+
+        # نحتاج تطابقًا قويًا حتى لا نختار آية خاطئة
+        # لمجرد تساوي عدد الكلمات.
+        if (
+            average_score >= 0.75
+            and exact_count >= max(2, len(words) // 3)
+        ):
+            full_ayah_candidates.append(
+                (
+                    average_score,
+                    exact_count,
+                    quran_words,
+                )
+            )
+
+    if full_ayah_candidates:
+        best_full_ayah = max(
+            full_ayah_candidates,
+            key=lambda item: (item[0], item[1])
+        )
+
+        return " ".join(best_full_ayah[2])
+
     candidates = []
 
     # Use a strong exact anchor first.
@@ -819,6 +1082,664 @@ def correct_quran_segment(text):
     return " ".join(corrected)
 
 
+
+def align_quran_words(whisper_words, quran_words):
+    """
+    محاذاة مرنة بين كلمات Whisper والكلمات القرآنية.
+
+    تسمح بالعلاقات:
+    1 -> 1
+    N -> 1
+    1 -> N
+    N -> M
+
+    وتعيد لكل كلمة قرآنية نطاق التوقيت المقابل لها.
+    """
+    if not whisper_words or not quran_words:
+        return []
+
+    n = len(whisper_words)
+    m = len(quran_words)
+
+    def norm(s):
+        return normalize_quran_text(s)
+
+    def group_score(src_group, dst_group):
+        src = norm(" ".join(
+            whisper_words[i]["text"]
+            for i in src_group
+        ))
+        dst = norm(" ".join(dst_group))
+
+        if not src or not dst:
+            return 0.0
+
+        return SequenceMatcher(None, src, dst).ratio()
+
+    # Dynamic programming محدود إلى مجموعات صغيرة،
+    # لأن حالات Whisper العملية غالبًا تكون 1↔1 أو 2↔1 أو 1↔2.
+    dp = [[None] * (m + 1) for _ in range(n + 1)]
+    dp[0][0] = (0.0, [])
+
+    for i in range(n + 1):
+        for j in range(m + 1):
+            state = dp[i][j]
+
+            if state is None:
+                continue
+
+            score, path = state
+
+            for src_count in (1, 2, 3):
+                ni = i + src_count
+
+                if ni > n:
+                    continue
+
+                src_group = list(range(i, ni))
+
+                for dst_count in (1, 2, 3):
+                    nj = j + dst_count
+
+                    if nj > m:
+                        continue
+
+                    dst_group = quran_words[j:nj]
+
+                    sim = group_score(src_group, dst_group)
+
+                    # عقوبة بسيطة للمجموعات غير المتساوية،
+                    # مع السماح الصريح بـ N↔1 و1↔N.
+                    size_penalty = 0.04 * abs(
+                        src_count - dst_count
+                    )
+
+                    transition = sim - size_penalty
+                    new_score = score + transition
+
+                    old = dp[ni][nj]
+
+                    if old is None or new_score > old[0]:
+                        dp[ni][nj] = (
+                            new_score,
+                            path + [(src_group, list(range(j, nj)), sim)]
+                        )
+
+    final = dp[n][m]
+
+    if final is None:
+        return []
+
+    _, path = final
+
+    aligned = []
+
+    for src_indices, dst_indices, sim in path:
+        starts = [
+            whisper_words[i]["start"]
+            for i in src_indices
+            if whisper_words[i].get("start") is not None
+        ]
+
+        ends = [
+            whisper_words[i]["end"]
+            for i in src_indices
+            if whisper_words[i].get("end") is not None
+        ]
+
+        if not starts or not ends:
+            continue
+
+        start = min(starts)
+        end = max(ends)
+
+        for dst_index in dst_indices:
+            aligned.append({
+                "text": quran_words[dst_index],
+                "start": start,
+                "end": end,
+                "score": sim,
+            })
+
+    return aligned
+
+
+def build_full_whisper_text(word_timings):
+    return " ".join(
+        word["text"].strip()
+        for word in word_timings
+        if word.get("text", "").strip()
+    ).strip()
+
+
+def correct_full_whisper_text(word_timings):
+    """
+    يبني النص الكامل من كلمات Whisper ثم يمرره عبر
+    آلية التصحيح الحالية، وبعدها يحاول محاذاة الكلمات
+    المصححة مع التوقيتات الأصلية.
+
+    هذه النسخة التجريبية لا تغير مسار /transcribe بعد.
+    """
+    full_text = build_full_whisper_text(word_timings)
+
+    if not full_text:
+        return None
+
+    corrected_text = correct_quran_segment(full_text)
+
+    if not corrected_text or corrected_text == full_text:
+        return None
+
+    corrected_words = corrected_text.split()
+
+    aligned = align_quran_words(
+        word_timings,
+        corrected_words,
+    )
+
+    if not aligned:
+        return None
+
+    return {
+        "input_text": full_text,
+        "corrected_text": corrected_text,
+        "word_timings": aligned,
+    }
+
+
+
+
+
+
+def extract_full_quran_text(whisper_text):
+    """
+    استخراج أفضل نص قرآني كامل مقابل نص Whisper الكامل.
+
+    المطابقة الأساسية تتم على النص الكامل ككتلة واحدة.
+    لا يوجد word alignment ولا تقسيم للآيات هنا.
+    """
+
+    if not whisper_text or not whisper_text.strip():
+        return None
+
+    ayahs = load_uthmani_ayahs()
+    pause_marks = {"ۖ", "ۗ", "ۚ", "ۛ", "ۙ", "ۜ", "۝"}
+
+    whisper_text = whisper_text.strip()
+    whisper_norm = normalize_quran_text(whisper_text)
+
+    if not whisper_norm:
+        return None
+
+    whisper_word_count = len(whisper_text.split())
+
+    # نبني قائمة كلمات القرآن مرة واحدة فقط.
+    qwords = []
+    qword_ayahs = []
+
+    for ai, ayah in enumerate(ayahs):
+        for word in ayah.split():
+            if word not in pause_marks:
+                qwords.append(word)
+                qword_ayahs.append(ai)
+
+    min_words = max(1, whisper_word_count - 3)
+    max_words = whisper_word_count + 3
+
+    best = None
+    best_score = -1.0
+
+    # نستخدم أول كلمة/كلمتين من Whisper لتحديد مواضع مرشحة،
+    # ثم نقارن النص الكامل فقط.
+    probe_count = min(2, whisper_word_count)
+    probe_words = whisper_text.split()[:probe_count]
+
+    candidate_starts = set()
+
+    for qi, qword in enumerate(qwords):
+        if qi + min_words > len(qwords):
+            break
+
+        score = SequenceMatcher(
+            None,
+            normalize_quran_text(" ".join(probe_words)),
+            normalize_quran_text(
+                " ".join(qwords[qi:qi + probe_count])
+            )
+        ).ratio()
+
+        if score >= 0.45:
+            candidate_starts.add(qi)
+
+    # في حال كانت البداية نفسها غير واضحة، نحتفظ أيضًا
+    # بمرشحين من مواضع الكلمات المطابقة بشكل مباشر.
+    if not candidate_starts:
+        first_norm = normalize_quran_text(probe_words[0])
+
+        for qi, qword in enumerate(qwords):
+            if normalize_quran_text(qword) == first_norm:
+                candidate_starts.add(qi)
+
+    for start_word in candidate_starts:
+
+        for length in range(min_words, max_words + 1):
+            end_word = start_word + length
+
+            if end_word > len(qwords):
+                break
+
+            candidate_text = " ".join(
+                qwords[start_word:end_word]
+            )
+
+            candidate_norm = normalize_quran_text(candidate_text)
+
+            if not candidate_norm:
+                continue
+
+            # هذه هي المطابقة الأساسية:
+            # النص الكامل مقابل النص الكامل.
+            score = SequenceMatcher(
+                None,
+                whisper_norm,
+                candidate_norm
+            ).ratio()
+
+            if score > best_score:
+                best_score = score
+                best = {
+                    "text": candidate_text,
+                    "score": score,
+                    "start_ayah": qword_ayahs[start_word],
+                    "end_ayah": qword_ayahs[end_word - 1],
+                    "word_count": length,
+                }
+
+    if best is None:
+        return None
+
+    return best
+
+def correct_full_quran_transcription(word_timings):
+    """
+    تصحيح النص القرآني الكامل:
+    1) نبني النص الكامل من Whisper.
+    2) نبحث عن تسلسل متجاور من الآيات.
+    3) نستخدم محاذاة مرنة 1->1 وN->1 و1->N وN->M.
+    4) نعيد النص القرآني الصحيح مع محاذاة التوقيتات.
+    """
+    if not word_timings:
+        return None
+
+    whisper_words = []
+
+    for w in word_timings:
+        text = w.get("text", "").strip()
+
+        if not text:
+            continue
+
+        # تجاهل رموز Whisper الخاصة، حتى لو التصقت بالكلمة.
+        for marker in ("[_EOT_]", "[_SOT_]", "[_BEG_]"):
+            text = text.replace(marker, "").strip()
+
+        if text:
+            whisper_words.append(text)
+
+    if not whisper_words:
+        return None
+
+    ayahs = load_uthmani_ayahs()
+    pause_marks = {"ۖ", "ۗ", "ۚ", "ۛ", "ۙ", "ۜ", "۝"}
+
+    def norm(s):
+        return normalize_quran_text(s)
+
+    # البحث عن نقطة البداية من خلال أول كلمات النص الكامل،
+    # مع السماح بأن تمتد البداية عبر أكثر من آية.
+    best_start = None
+    best_start_score = -1.0
+
+    probe_count = min(8, len(whisper_words))
+
+    for ai in range(len(ayahs)):
+        probe_words = []
+
+        for aj in range(ai, min(ai + 3, len(ayahs))):
+            probe_words.extend(
+                w for w in ayahs[aj].split()
+                if w not in pause_marks
+            )
+
+            if len(probe_words) >= probe_count:
+                break
+
+        if len(probe_words) < probe_count:
+            continue
+
+        scores = [
+            SequenceMatcher(
+                None,
+                norm(whisper_words[i]),
+                norm(probe_words[i])
+            ).ratio()
+            for i in range(probe_count)
+        ]
+
+        score = sum(scores) / len(scores)
+
+        if score > best_start_score:
+            best_start_score = score
+            best_start = ai
+
+    # ---------------------------------------------------------
+    # قاعدة مساعدة لاكتشاف بداية الآية:
+    # إذا بدأت قراءة Whisper بـ "إن"، نعتبر ذلك مؤشرًا
+    # إضافيًا لبداية آية محتملة، ثم نؤكد الاختيار من خلال
+    # عدة كلمات لاحقة بدل الاعتماد على الكلمة الأولى وحدها.
+    # ---------------------------------------------------------
+    first_whisper = whisper_words[0].strip()
+    first_norm = normalize_quran_text(first_whisper)
+
+    if first_norm == normalize_quran_text("إن"):
+        probe_count_special = min(8, len(whisper_words))
+        whisper_probe = normalize_quran_text(
+            " ".join(
+                w
+                for w in whisper_words[:probe_count_special]
+            )
+        )
+
+        special_best = None
+        special_score = -1.0
+
+        for ai, ayah_text in enumerate(ayahs):
+            ayah_words = ayah_text.split()
+
+            if not ayah_words:
+                continue
+
+            if normalize_quran_text(ayah_words[0]) != first_norm:
+                continue
+
+            candidate_probe = normalize_quran_text(
+                " ".join(ayah_words[:probe_count_special])
+            )
+
+            score = SequenceMatcher(
+                None,
+                whisper_probe,
+                candidate_probe
+            ).ratio()
+
+            if score > special_score:
+                special_score = score
+                special_best = ai
+
+        if (
+            special_best is not None
+            and special_score >= 0.45
+            and (
+                best_start is None
+                or special_score > best_start_score
+            )
+        ):
+            best_start = special_best
+            best_start_score = special_score
+
+    # ---------------------------------------------------------
+    # للتسجيلات القصيرة:
+    # قد تكون درجة البحث العام عن البداية أقل من 0.70،
+    # لكن بداية الآية نفسها قد تطابق الكلمات المسموعة بقوة.
+    # نستخدم ذلك كدليل إضافي، دون خفض العتبة العامة.
+    # ---------------------------------------------------------
+    n = len(whisper_words)
+
+    prefix_start_score = -1.0
+
+    if best_start is not None:
+        prefix_words = []
+
+        for word in ayahs[best_start].split():
+            if word not in pause_marks:
+                prefix_words.append(word)
+
+        probe_len = min(n, len(prefix_words))
+
+        if probe_len > 0:
+            prefix_scores = [
+                SequenceMatcher(
+                    None,
+                    norm(whisper_words[i]),
+                    norm(prefix_words[i])
+                ).ratio()
+                for i in range(probe_len)
+            ]
+
+            prefix_start_score = (
+                sum(prefix_scores) / len(prefix_scores)
+            )
+
+    if best_start is None:
+        return None
+
+    if best_start_score < 0.70 and prefix_start_score < 0.70:
+        return None
+
+    # نختبر عدة نوافذ من الآيات حول نقطة البداية.
+    # لا نفترض أن عدد كلمات القرآن = عدد كلمات Whisper،
+    # لأن N->1 و 1->N قد يغيران العدد.
+    candidate_windows = []
+
+    for end_ayah in range(best_start, min(best_start + 8, len(ayahs))):
+        qwords = []
+        qword_ayahs = []
+
+        for ai in range(best_start, end_ayah + 1):
+            for word in ayahs[ai].split():
+                if word in pause_marks:
+                    continue
+                qwords.append(word)
+                qword_ayahs.append(ai)
+
+        m = len(qwords)
+
+        # -----------------------------------------------------
+        # التسجيل القصير قد يحتوي على بداية آية فقط.
+        # في هذه الحالة نختبر بادئة الآية بنفس طول Whisper
+        # بدل إجبار الـDP على تغطية الآية كاملة.
+        # -----------------------------------------------------
+        if end_ayah == best_start and m > n:
+            prefix_qwords = qwords[:n]
+            prefix_ayahs = qword_ayahs[:n]
+
+            candidate_windows.append(
+                (end_ayah, prefix_qwords, prefix_ayahs)
+            )
+
+        # نسمح بفارق صغير فقط في عدد الكلمات.
+        if (
+            (end_ayah == best_start and m >= (n + 1) // 2)
+            or (n - 3 <= m <= n + 3)
+        ):
+            candidate_windows.append(
+                (end_ayah, qwords, qword_ayahs)
+            )
+
+    if not candidate_windows:
+        return None
+
+    best_result = None
+    best_result_key = None
+
+    for end_ayah, qwords, qword_ayahs in candidate_windows:
+        m = len(qwords)
+
+        # Dynamic programming:
+        # 1->1, 1->2, 2->1, 2->2, ... حتى 3->3
+        dp = [[None] * (m + 1) for _ in range(n + 1)]
+        dp[0][0] = (0.0, [])
+
+        for i in range(n + 1):
+            for j in range(m + 1):
+                state = dp[i][j]
+
+                if state is None:
+                    continue
+
+                total, path = state
+
+                for src_count in (1, 2, 3):
+                    if i + src_count > n:
+                        continue
+
+                    for dst_count in (1, 2, 3):
+                        if j + dst_count > m:
+                            continue
+
+                        src = norm(
+                            " ".join(
+                                whisper_words[i:i + src_count]
+                            )
+                        )
+
+                        dst = norm(
+                            " ".join(
+                                qwords[j:j + dst_count]
+                            )
+                        )
+
+                        if not src or not dst:
+                            continue
+
+                        sim = SequenceMatcher(
+                            None,
+                            src,
+                            dst
+                        ).ratio()
+
+                        penalty = 0.03 * abs(
+                            src_count - dst_count
+                        )
+
+                        value = total + sim - penalty
+
+                        ni = i + src_count
+                        nj = j + dst_count
+
+                        if (
+                            dp[ni][nj] is None
+                            or value > dp[ni][nj][0]
+                        ):
+                            dp[ni][nj] = (
+                                value,
+                                path + [
+                                    (
+                                        i,
+                                        ni,
+                                        j,
+                                        nj,
+                                        sim,
+                                    )
+                                ],
+                            )
+
+        result = dp[n][m]
+
+        if result is None:
+            continue
+
+        total, path = result
+
+        strong = sum(
+            sim >= 0.60
+            for _, _, _, _, sim in path
+        )
+
+        required_strong = min(
+            5,
+            max(2, int(len(path) * 0.60))
+        )
+
+        if strong < required_strong:
+            continue
+
+        # نعطي أولوية للمحاذاة الأقوى، ثم عدد التطابقات القوية،
+        # ثم الأقرب لعدد كلمات Whisper.
+        key = (
+            strong,
+            total,
+            -abs(m - n),
+        )
+
+        if best_result_key is None or key > best_result_key:
+            best_result_key = key
+            best_result = (
+                end_ayah,
+                qwords,
+                qword_ayahs,
+                total,
+                path,
+                strong,
+            )
+
+    if best_result is None:
+        return None
+
+    (
+        end_ayah,
+        qwords,
+        qword_ayahs,
+        total,
+        path,
+        strong,
+    ) = best_result
+
+    aligned = []
+
+    for i1, i2, j1, j2, sim in path:
+        starts = [
+            word_timings[i]["start"]
+            for i in range(i1, i2)
+            if word_timings[i].get("start") is not None
+        ]
+
+        ends = [
+            word_timings[i]["end"]
+            for i in range(i1, i2)
+            if word_timings[i].get("end") is not None
+        ]
+
+        if not starts or not ends:
+            continue
+
+        start = min(starts)
+        end = max(ends)
+
+        for j in range(j1, j2):
+            aligned.append({
+                "text": qwords[j],
+                "start": start,
+                "end": end,
+                "score": sim,
+                "ayah": qword_ayahs[j],
+            })
+
+    if not aligned:
+        return None
+
+    return {
+        "input_text": " ".join(whisper_words),
+        "corrected_text": " ".join(qwords),
+        "word_timings": aligned,
+        "score": total,
+        "strong_matches": strong,
+        "start_ayah": qword_ayahs[0],
+        "end_ayah": qword_ayahs[-1],
+    }
+
+
+
 @app.post("/correct_quran")
 async def correct_quran(payload: dict):
     subtitles = payload.get("subtitles") or []
@@ -841,7 +1762,10 @@ async def correct_quran(payload: dict):
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(
+    file: UploadFile = File(...),
+    content_type: str = Form("normal"),
+):
     ext = Path(file.filename).suffix
 
     video_path = UPLOADS / f"{uuid.uuid4()}{ext}"
@@ -890,6 +1814,137 @@ async def transcribe(file: UploadFile = File(...)):
         )
 
         subtitles = parse_srt(srt_path)
+
+        if content_type == "quran":
+            # ---------------------------------------------------------
+            # المعالجة القرآنية الكاملة:
+            # 1) نجمع جميع كلمات Whisper.
+            # 2) نصحح التسجيل الكامل دفعة واحدة.
+            # 3) نحافظ على توقيت كل كلمة عبر المحاذاة المرنة.
+            # 4) نعيد بناء subtitles مع حدود الآيات والتقسيم التكراري.
+            # ---------------------------------------------------------
+            word_timings = load_whisper_word_timings(
+                srt_path.with_suffix(".json")
+            )
+
+            if word_timings:
+                full_whisper_text = build_full_whisper_text(word_timings)
+                full_quran_result = extract_full_quran_text(full_whisper_text)
+
+                print("\n===== REAL FULL WHISPER -> FULL QURAN TEST =====")
+                print("WHISPER WORDS:", len(word_timings))
+                print("WHISPER TEXT :", full_whisper_text)
+                print("QURAN RESULT :", full_quran_result)
+                print("===============================================\n")
+
+                if full_quran_result and full_quran_result.get("text"):
+                    quran_text = full_quran_result["text"]
+                    start_ayah = full_quran_result["start_ayah"]
+                    end_ayah = full_quran_result["end_ayah"]
+
+                    # النص القرآني الصحيح تم استخراجه بالفعل.
+                    # نبني كلمات القرآن ونربط كل كلمة برقم آيتها.
+                    ayahs = load_uthmani_ayahs()
+                    pause_marks = {"ۖ", "ۗ", "ۚ", "ۛ", "ۙ", "ۜ", "۝"}
+
+                    quran_words = []
+                    quran_word_ayahs = []
+
+                    for ai in range(start_ayah, end_ayah + 1):
+                        for word in ayahs[ai].split():
+                            if word in pause_marks:
+                                continue
+                            quran_words.append(word)
+                            quran_word_ayahs.append(ai)
+
+                    # نستخدم المحاذاة الموجودة أصلًا، دون تغيير خوارزميتها.
+                    aligned = align_quran_words(
+                        word_timings,
+                        quran_words
+                    )
+
+                    # إضافة رقم الآية لكل كلمة بعد المحاذاة.
+                    for item_index, item in enumerate(aligned):
+                        if item_index < len(quran_word_ayahs):
+                            item["ayah"] = quran_word_ayahs[item_index]
+
+                    if aligned:
+                        corrected_timings = aligned
+
+                        print(
+                            "QURAN FULLTEXT DEBUG:",
+                            "input_words=", len(word_timings),
+                            "corrected_words=", len(corrected_timings),
+                            "ayah_range=",
+                            start_ayah,
+                            "->",
+                            end_ayah,
+                            "score=",
+                            round(full_quran_result.get("score", 0), 4),
+                        )
+
+                        subtitles = [{
+                            "start": ms_to_time(
+                                corrected_timings[0]["start"]
+                            ),
+                            "end": ms_to_time(
+                                corrected_timings[-1]["end"]
+                            ),
+                            "text": " ".join(
+                                w["text"] for w in corrected_timings
+                            ),
+                            "words": corrected_timings,
+                            "group_id": 1,
+                        }]
+
+                        # نعيد التقسيم باستخدام الخوارزمية الموجودة
+                        # أصلًا داخل parse_srt.
+                        temp_srt = srt_path.with_suffix(".quran_tmp.srt")
+                        with temp_srt.open(
+                            "w",
+                            encoding="utf-8"
+                        ) as f:
+                            f.write(
+                                "1\n"
+                                f"{subtitles[0]['start']} --> "
+                                f"{subtitles[0]['end']}\n"
+                                f"{subtitles[0]['text']}\n\n"
+                            )
+
+                        original_loader = load_whisper_word_timings
+
+                        try:
+                            globals()["load_whisper_word_timings"] = (
+                                lambda _path: corrected_timings
+                            )
+                            subtitles = parse_srt(temp_srt)
+                        finally:
+                            globals()["load_whisper_word_timings"] = (
+                                original_loader
+                            )
+                            try:
+                                temp_srt.unlink()
+                            except Exception:
+                                pass
+
+                    else:
+                        print(
+                            "QURAN FULLTEXT DEBUG: "
+                            "alignment failed; "
+                            "keeping Whisper subtitles"
+                        )
+
+                else:
+                    print(
+                        "QURAN FULLTEXT DEBUG: "
+                        "extraction failed; "
+                        "keeping Whisper subtitles"
+                    )
+            else:
+                print(
+                    "QURAN FULLTEXT DEBUG: "
+                    "no Whisper word timings"
+                )
 
         display_subtitles = []
 

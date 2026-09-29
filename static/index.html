@@ -251,6 +251,47 @@ cursor:pointer;
     cursor:pointer;
 }
 
+#contentTypePanel {
+    display:none;
+    position:absolute;
+    left:50%;
+    bottom:130px;
+    width:min(90vw,360px);
+    box-sizing:border-box;
+    transform:translateX(-50%);
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+    z-index:1000;
+    padding:14px;
+    background:#ffffff;
+    border-radius:16px;
+    pointer-events:auto;
+}
+
+#contentTypeTitle {
+    color:#111827;
+    font-size:16px;
+    font-weight:bold;
+    text-align:center;
+    margin-bottom:4px;
+}
+
+#contentTypePanel button {
+    min-height:44px;
+    border:0;
+    border-radius:12px;
+    background:#f3f4f6;
+    color:#111827;
+    font-size:15px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+#contentTypePanel button:active {
+    transform:scale(0.98);
+}
+
 #backgroundOpacityPanel {
     display:none;
     position:absolute;
@@ -563,6 +604,12 @@ controls>
     <input type="range" id="backgroundOpacityPicker" min="0" max="100" value="43" step="1">
     <span id="backgroundOpacityValue">43%</span>
     <button id="backgroundOpacityOk" type="button">OK</button>
+</div>
+
+<div id="contentTypePanel">
+    <div id="contentTypeTitle">اختر نوع المحتوى</div>
+    <button type="button" id="contentTypeQuran">📖 قرآن كريم</button>
+    <button type="button" id="contentTypeNormal">📝 نص عادي</button>
 </div>
 
 <div id="exportProgressPanel">
@@ -1124,8 +1171,26 @@ document.getElementById('fontStyleBtn').addEventListener('click', function() {
     }
 });
 
+const contentTypePanel = document.getElementById("contentTypePanel");
+const contentTypeQuran = document.getElementById("contentTypeQuran");
+const contentTypeNormal = document.getElementById("contentTypeNormal");
+
+let contentType = "normal";
+
 pickVideoBtn.onclick=()=>{
-videoFile.click();
+    contentTypePanel.style.display = "flex";
+};
+
+contentTypeQuran.onclick=()=>{
+    contentType = "quran";
+    contentTypePanel.style.display = "none";
+    videoFile.click();
+};
+
+contentTypeNormal.onclick=()=>{
+    contentType = "normal";
+    contentTypePanel.style.display = "none";
+    videoFile.click();
 };
 
 addTextBtn.onclick=()=>{
@@ -1563,6 +1628,7 @@ const progressTimer=setInterval(()=>{
 
 formData.append("file",videoFile.files[0]);
 formData.append("srt", srtText);
+formData.append("content_type", contentType);
 
 const leftVal = parseFloat(overlay.style.left) || 50;
 const topVal = parseFloat(overlay.style.top) || 40;
@@ -1680,6 +1746,7 @@ return;
 const formData=new FormData();
 formData.append("file",videoFile.files[0]);
 formData.append("srt", srtText);
+formData.append("content_type", contentType);
 
 try{
 
